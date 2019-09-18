@@ -4,8 +4,20 @@
   "description": "monorepo build tools",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "npm run compile",
+    "compile": "node ../../node_modules/typescript/bin/tsc -p ."
+  },
+  "dependencies": {
+    "oao": "~1.6.0",
+    "typescript": "~3.4.0",
+    "folder-hash": "~3.2.0",
+    "glob": "~7.1.2",
+    "ajlm.utils": "^0.0.1"
   },
   "author": "Anthony JL Morel",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^12.7.5"
+  }
 }
