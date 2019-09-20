@@ -4,13 +4,11 @@
   "description": "monorepo build tools",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node ./node_modules/mocha/bin/mocha tests",
     "build": "npm run compile",
-    "compile": "node ../../node_modules/typescript/bin/tsc -p ."
+    "compile": "node ./node_modules/typescript/bin/tsc -p ."
   },
   "dependencies": {
-    "oao": "~1.6.0",
-    "typescript": "~3.4.0",
     "folder-hash": "~3.2.0",
     "glob": "~7.1.2",
     "ajlm.utils": "^0.0.1"
@@ -18,6 +16,7 @@
   "author": "Anthony JL Morel",
   "license": "MIT",
   "devDependencies": {
+    "typescript": "~3.4.0",
     "@types/node": "^12.7.5"
   }
 }

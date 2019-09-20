@@ -2,6 +2,7 @@ import { TSpec } from 'repository-specs-reader';
 import { MapBasedDepthFirstSearch, TreeTraversalType } from 'ajlm.utils';
 import { exec } from 'child_process';
 import { dirname } from 'path';
+import { Logger } from './logger';
 
 export class TreeExecutor {
 
@@ -14,7 +15,7 @@ export class TreeExecutor {
     /**
      * Executes an action on each node following a DFS algorithm
      */
-    public async executeAction( rootNode: TSpec, callback: (node: TSpec) => Promise<void> ): Promise<void>{
+    public async executeAction( rootNode: TSpec, callback: (node: TSpec, parent: TSpec, depth: number) => Promise<void> ): Promise<void>{
 
         let dfs = new MapBasedDepthFirstSearch( this.adjacentNodeReader, this.nodeHash );
         await dfs.perform(rootNode, callback, TreeTraversalType.PostOrder);
@@ -25,26 +26,34 @@ export class TreeExecutor {
      */
     public async executeCommand(rootNode: TSpec, command: string): Promise<void> {
         
-        // @TODO improve logging ...
-        
-        return this.executeAction(rootNode, async (node: TSpec)=>{
+        let cmdStart: number = Date.now();
+        await this.executeAction(rootNode, async (node: TSpec, parent: TSpec, depth: number)=>{
             return new Promise<void>((resolve, reject)=>{
 
+                Logger.log(`--->  Executing ${command} on ${node.name}`);
+
+                let childStart: number = Date.now();
                 var child = exec(command, {
                     cwd: dirname(node.path)
                 });
                 child.stdout.on('data', function(data) {
-                    console.log('stdout: ' + data);
+                    Logger.log(data);
                 });
                 child.stderr.on('data', function(data) {
-                    console.log('stderr: ' + data);
+                    Logger.error(data);
                 });
                 child.on('close', function(code) {
                     // Depending on code ... reject or resolve and display info
-                    console.log('closing code: ' + code);
+                    Logger.log(`<---  End of ${command} on ${node.name}, code : ${code} / ${Date.now() - childStart} ms`);
+                    
                     resolve();
+                    
                 });
             });
         });
+
+        Logger.log(`End Of command in ${Date.now() - cmdStart} ms`);
+        
+        
     }
 }
