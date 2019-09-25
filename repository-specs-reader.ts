@@ -1,7 +1,7 @@
 
 import { readFile as formerReadFile, stat as formerStat } from "fs";
 import { promisify } from "util";
-import { normalize, basename, join } from "path";
+import { dirname, resolve, normalize, basename, join } from "path";
 import * as glob from "glob";
 
 import { TreeTraversalType, MapBasedDepthFirstSearch } from "ajlm.utils";
@@ -30,10 +30,12 @@ export class RepositorySpecsReader {
     /**
      * Retrieves all specs from all packages in a mono repository
      */
-    public async getRepositoryPackages(repositoryPath: string): Promise<TRepositorySpecs> {
-        let pkgFiles: string[] = await this.getPackagesFilesList(repositoryPath);
+    public async getRepositoryPackages(repositoryPackageJsonPath: string): Promise<TRepositorySpecs> {
+        
+        let pkgFiles: string[] = await this.getPackagesFilesList(repositoryPackageJsonPath);
 
-        return this.getAllSpecs(pkgFiles);
+        let result = await this.getAllSpecs(pkgFiles);
+        return result;
     }
 
     /**
@@ -46,12 +48,13 @@ export class RepositorySpecsReader {
                     pck = JSON.parse(pckContent);
                 return pck;
             },
-            repoPath: string = normalize(`${packagePath}/../..`),
+            repoPath: string = normalize(`${packagePath}/../..`), // @TODO I am wondering if it is not a specificity ...
             readPackages: ObjectLiteral = {
                 
             };
         
         if(basename(repoPath) == "@types"){
+            // @TODO I am wondering if it is not a specificity ...
             repoPath = normalize(`${packagePath}/../../..`)
         }
 
@@ -70,36 +73,41 @@ export class RepositorySpecsReader {
         let dfs = new MapBasedDepthFirstSearch<TSpec>( async (node: TSpec) => {
             let nodes = [];
 
-            for(var dep in node.pkg.dependencies){
-                let spec: TSpec,
-                    depFolder = dep;
+            let pckKeys: string[] = ["dependencies", "devDependencies"];
 
-                // avoid re reading files twice
-                spec = readPackages[dep];
-
-                if(!spec) {
-
-                    let filePath = join(repoPath,"/", depFolder, "/package.json");
-
-                    try{
-                        await stat(filePath);
-                    }catch(e){
-                        continue;
+            for(var i = 0;i < pckKeys.length; i++){
+                for(var dep in node.pkg[pckKeys[i]]) {
+                    let spec: TSpec,
+                        depFolder = dep;
+    
+                    // avoid re reading files twice
+                    spec = readPackages[dep];
+    
+                    if(!spec) {
+    
+                        let filePath = join(repoPath,"/", depFolder, "/package.json");
+    
+                        try{
+                            await stat(filePath);
+                        }catch(e){
+                            continue;
+                        }
+                        
+                        let filePck = await readPackage( filePath );
+                        spec = {
+                            name: filePck.name,
+                            pkg: filePck,
+                            path: filePath,
+                            dependants: {},
+                            dependencies: {}
+                        };
+                        readPackages[ spec.name ] = spec;
                     }
                     
-                    let filePck = await readPackage( filePath );
-                    spec = {
-                        name: filePck.name,
-                        pkg: filePck,
-                        path: filePath,
-                        dependants: {},
-                        dependencies: {}
-                    };
-                    readPackages[ spec.name ] = spec;
+                    nodes.push(spec);
                 }
-                
-                nodes.push(spec);
             }
+            
 
             return nodes;
         }, async (node: TSpec) => {
@@ -107,7 +115,7 @@ export class RepositorySpecsReader {
         });
 
         await dfs.perform(result, async (node: TSpec, parent: TSpec) => {
-            
+
             if(!parent){
                 return;
             }
@@ -135,6 +143,7 @@ export class RepositorySpecsReader {
         // read all packages
         await Promise.all( 
             files.map((file)=>{
+                
                 return readFile(file, { encoding: 'utf8'})
                 .then((fileContent: string)=>{
                     let pckg = JSON.parse(fileContent);
@@ -156,6 +165,7 @@ export class RepositorySpecsReader {
          let dfs = new MapBasedDepthFirstSearch<TSpec>( async (node: TSpec) => {
              let nodes = [];
 
+             
              if(!node.pkg.dependencies) { return nodes; }
 
              for(var dep in node.pkg.dependencies){
@@ -199,17 +209,56 @@ export class RepositorySpecsReader {
     }
 
 
-    private getPackagesFilesList(repoPath: string): Promise<string[]> {
+    private async getPackagesFilesList(packageJsonRepoPath: string): Promise<string[]> {
         
+        packageJsonRepoPath = resolve(packageJsonRepoPath);
+
+        let packageContent: string = await readFile(resolve(packageJsonRepoPath), "utf8"),
+            pkg: ObjectLiteral = JSON.parse(packageContent);
+
+        let packageEntries: string[] = pkg.workspaces.packages;
+
+        let results: string[] = [];
+        await Promise.all(packageEntries.map((entry)=>{
+            return this.globPackages( dirname(packageJsonRepoPath), `${entry}/**/package.json`)
+            .then((rs: string[])=>{
+                results.push.apply(results, rs);
+            });
+        }));
+        
+        return results;
+    }
+
+    private globPackages(packagePath: string, entry: string): Promise<string[]>{
         return new Promise<string[]>((resolve, reject)=>{
-            glob("**/**/package.json", {
-                cwd: repoPath,
+           
+           
+           if(entry.indexOf("./") == 0 || entry.indexOf(".\\") == 0){
+               // if a path starts with a dot, it ignores the "ignore"
+               // entry (node modules and co ...)
+               // see bug https://github.com/isaacs/node-glob/issues/309
+               entry = entry.substring(2);
+           }
+
+            glob(entry, {
+                cwd: packagePath,
                 absolute: true,
+                stat: false,
                 ignore: [
+                    /* "./node_modules/**",
+                    "./dist/**",
+                    "./bin/**",
+                    "./lib/**",
+                    "./bundle/**",
+                    "./logs/**",
+                    "./cfg/**",*/
                     "**/node_modules/**",
                     "**/dist/**",
                     "**/bin/**",
-                    "**/lib/**"
+                    "**/lib/**",
+                    "**/bundle/**",
+                    "**/logs/**",
+                    "**/cfg/**"
                 ]
             }, (err, files)=>{
                 if(err){
@@ -219,8 +268,6 @@ export class RepositorySpecsReader {
                 }
             });
         });
-        
-
     }
 
 }
