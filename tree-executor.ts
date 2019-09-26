@@ -1,12 +1,22 @@
 import { TSpec, RepositorySpecsReader, TRepositorySpecs } from './repository-specs-reader';
-import { MapBasedDepthFirstSearch, TreeTraversalType, BreadthFirstSearch } from 'ajlm.utils';
+import { MapBasedDepthFirstSearch, BreadthFirstSearch } from 'ajlm.utils';
 import { resolve, dirname } from 'path';
 import { Logger } from './logger';
 import { exec } from 'child_process';
 
-export type TTreeExecutionOptions = {
-    parallel?: boolean;
+type TTreeExecOptions = {
+    tree: {
+        parallel?: boolean;
+    }
 };
+
+type TAllExecOptions = {
+    all: {
+        parallel?: boolean;
+    }
+};
+
+export type TExecutionOptions = { forceAll?:boolean; } & (TTreeExecOptions | TAllExecOptions);
 
 export class TreeExecutor {
 
@@ -51,7 +61,7 @@ export class TreeExecutor {
 
     public async execCmdOnRepository(packageJson: string, 
                                     command: string | ((node: TSpec) => Promise<void>),
-                                    options?: TTreeExecutionOptions): Promise<void> {
+                                    options?: TExecutionOptions): Promise<void> {
         let repo: TRepositorySpecs = await this.rsr.getRepositoryPackages(resolve(packageJson));
 
         // create a common root node to allow parallel compilation
@@ -79,7 +89,7 @@ export class TreeExecutor {
      */
     public async execCmdOnPackage( packageJson: string | TSpec, 
                                   command: string | ((node: TSpec) => Promise<void>),
-                                  options?: TTreeExecutionOptions ): Promise<void>{
+                                  options?: TExecutionOptions ): Promise<void>{
         let specs: TSpec;
         
         if(typeof packageJson == "string"){
@@ -121,12 +131,12 @@ export class TreeExecutor {
 
     protected async triggerCommand( spec: TSpec, 
                                 command: string | ((node: TSpec) => Promise<void>),
-                                options?: TTreeExecutionOptions ): Promise<void> {
-        
+                                options: TExecutionOptions ): Promise<void> {
+                                            
         let orderedNodes: TSpec[][] = 
-            await this.getSpecsInOrder(spec, options && options.parallel ? "parallel" : "sequential");
+            await this.getSpecsInOrder(spec, options);
 
-        for(var i = 0; i< orderedNodes.length; i++){
+        for(var i = 0; i< orderedNodes.length; i++) {
 
             await Promise.all( orderedNodes[i].map((node: TSpec)=>{
 
@@ -141,11 +151,10 @@ export class TreeExecutor {
                 }
             }));
 
-            Logger.info(" ******************************* ");
         }
     }
 
-    protected async getSpecsInOrder(root: TSpec, type: "parallel" | "sequential"): Promise<TSpec[][]> {
+    protected async getSpecsInOrder(root: TSpec, options: TExecutionOptions): Promise<TSpec[][]> {
         let grouped: { [key:string]: TSpec[]; } = {};
         let nodeByLevel: { [name: string]: number; } = {};
         let results: TSpec[][] = [];
@@ -181,9 +190,15 @@ export class TreeExecutor {
             .sort( (a, b)=>{ return (+a) - (+b); })
             .reverse()
             .map(k => grouped[k].sort((n1, n2)=>{ return n1.name.localeCompare(n2.name);}));
-            
-        if(type == "sequential"){
-           
+        
+        if((<TTreeExecOptions>options).tree){
+
+            if((<TTreeExecOptions>options).tree.parallel){
+                // Tree with options to parallelize siblings
+                return results;
+            }
+
+            // Tree with options to sequentialize stuff
             // flatten previous result
             let newResults: TSpec[][] = [];
 
@@ -193,7 +208,34 @@ export class TreeExecutor {
                 });
             });
 
-            results = newResults;
+            return newResults;
+        }
+        
+        if((<TAllExecOptions>options).all){
+            let uniqueCell: TSpec[] = [],
+                newResults: TSpec[][] = [uniqueCell];
+
+            if((<TAllExecOptions>options).all.parallel){
+                // Parallelize all without paying attention to relations
+                results.forEach((result) => {
+                    result.forEach((r)=>{
+                        uniqueCell.push(r);
+                    });
+                });
+
+                return newResults;
+            }
+
+            // Sequentialize all without paying attention to relations
+            // flatten previous result
+            
+            results.forEach((result)=>{
+                result.forEach((r)=>{
+                    newResults.push([r]);
+                });
+            });
+
+            return newResults;
         }
 
         return results;   

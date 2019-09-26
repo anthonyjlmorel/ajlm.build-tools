@@ -5,7 +5,7 @@ import { promisify } from "util";
 import { hashElement } from "folder-hash";
 import { Logger } from './logger';
 import { TreeTraversalType } from 'ajlm.utils';
-import { TreeExecutor } from './tree-executor';
+import { TreeExecutor, TExecutionOptions } from './tree-executor';
 
 let readFile = promisify(formerReadFile);
 let writeFile = promisify(formerWriteFile);
@@ -42,21 +42,21 @@ export class TreeBuilder extends TreeExecutor {
      * Executes a build action against each node starting from the leaves.
      * 
      */
-    public async buildPackage(packageJson: string | TSpec): Promise<void>{
+    public async buildPackage(packageJson: string | TSpec, options: TExecutionOptions): Promise<void>{
         
         this.forcedNodes = {};
-        await this.execCmdOnPackage(packageJson, this.compilationCallback.bind(this));
+        await this.execCmdOnPackage(packageJson, this.compilationCallback.bind(this), options);
 
     }
 
     /**
      * Builds an entire repository
      */
-    public async buildRepository(repoPath: string, forceAll: boolean = false): Promise<void> {
+    public async buildRepository(repoPath: string, options: TExecutionOptions): Promise<void> {
 
-        this.forceAll = forceAll;
+        this.forceAll = options.forceAll === true;
 
-        await this.execCmdOnRepository(repoPath, this.buildPackage.bind(this));
+        await this.execCmdOnRepository(repoPath, this.buildPackage.bind(this), options);
 
     }
 
