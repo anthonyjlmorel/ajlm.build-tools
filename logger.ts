@@ -6,7 +6,7 @@ export type TLoggerOptions = {
     color?: TColor;
 };
 
-// @TODO to elaborate ... :)
+
 export class Logger {
 
     private static colorMap: { [level: string]: TColor; } = {
@@ -22,7 +22,7 @@ export class Logger {
             msg = JSON.stringify(msg);
         }
 
-        msg = `${(new Date()).toISOString()}\t${msg}`;
+        msg = `${(new Date()).toISOString()}  ${msg}`;
 
         let color: TColor = Logger.colorMap[ level ];
 

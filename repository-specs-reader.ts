@@ -17,6 +17,7 @@ export type TSpec = {
     pkg: ObjectLiteral; // package.json file
     dependencies: { [pkgName: string]: TSpec };
     dependants: { [pkgName: string]: TSpec };
+    isVirtual?: boolean;
 };
 
 export type TRepositorySpecs = {
@@ -70,6 +71,20 @@ export class RepositorySpecsReader {
        
         readPackages[ pck.name ] = result;
 
+        let buildParentDependantsTree = async (node: TSpec, parent: TSpec) => {
+            if(!parent){
+                return;
+            }
+
+            if(!node.dependants[ parent.name ]) {
+                node.dependants[ parent.name ] = parent;
+            }
+
+            if(!parent.dependencies[ node.name ]){
+                parent.dependencies[ node.name ] = node;
+            }
+        };
+
         let dfs = new MapBasedDepthFirstSearch<TSpec>( async (node: TSpec) => {
             let nodes = [];
 
@@ -110,25 +125,9 @@ export class RepositorySpecsReader {
             
 
             return nodes;
-        }, async (node: TSpec) => {
-            return node.name;
         });
 
-        await dfs.perform(result, async (node: TSpec, parent: TSpec) => {
-
-            if(!parent){
-                return;
-            }
-
-            if(!node.dependants[ parent.name ]) {
-                node.dependants[ parent.name ] = parent;
-            }
-
-            if(!parent.dependencies[ node.name ]){
-                parent.dependencies[ node.name ] = node;
-            }
-
-        }, TreeTraversalType.PostOrder);
+        await dfs.perform(result, buildParentDependantsTree, TreeTraversalType.PostOrder);
 
 
         return result;
@@ -160,7 +159,19 @@ export class RepositorySpecsReader {
                 });
             })
          );
+         let buildParentDependantsTree = async (node: TSpec, parent: TSpec) => {
+            if(!parent){
+                return;
+            }
 
+            if(!node.dependants[ parent.name ]) {
+                node.dependants[ parent.name ] = parent;
+            }
+
+            if(!parent.dependencies[ node.name ]){
+                parent.dependencies[ node.name ] = node;
+            }
+        };
 
          let dfs = new MapBasedDepthFirstSearch<TSpec>( async (node: TSpec) => {
              let nodes = [];
@@ -178,24 +189,12 @@ export class RepositorySpecsReader {
              }
 
              return nodes;
-         }, async (node: TSpec) => { return node.name; } );
+         });
 
 
          // create relationships in the trees
          for(var k in results.packagesMap) {
-            await dfs.perform(results.packagesMap[k], async (node: TSpec, parent: TSpec)=>{
-                if(!parent){
-                    return;
-                }
-                if(!node.dependants[ parent.name ]) {
-                    node.dependants[ parent.name ] = parent;
-                }
-
-                if(!parent.dependencies[ node.name ]){
-                    parent.dependencies[ node.name ] = node;
-                }
-
-            }, TreeTraversalType.PostOrder);
+            await dfs.perform(results.packagesMap[k], buildParentDependantsTree, TreeTraversalType.PostOrder);
          }
 
          for(var k in results.packagesMap) {

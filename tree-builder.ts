@@ -4,8 +4,7 @@ import { resolve, join, dirname } from "path";
 import { promisify } from "util";
 import { hashElement } from "folder-hash";
 import { Logger } from './logger';
-import { exec } from 'child_process';
-import { MapBasedDepthFirstSearch, TreeTraversalType } from 'ajlm.utils';
+import { TreeTraversalType } from 'ajlm.utils';
 import { TreeExecutor } from './tree-executor';
 
 let readFile = promisify(formerReadFile);
@@ -45,17 +44,8 @@ export class TreeBuilder extends TreeExecutor {
      */
     public async buildPackage(packageJson: string | TSpec): Promise<void>{
         
-        let specs: TSpec;
-        
-        if(typeof packageJson == "string"){
-            specs = await this.rsr.getPackageCompilationSpec(resolve(<string>packageJson));
-        } else {
-            specs = <TSpec>packageJson;
-        }
-
         this.forcedNodes = {};
-
-        await this.dependenciesDfs.perform(specs, this.compilationCallback.bind(this), TreeTraversalType.PostOrder);
+        await this.execCmdOnPackage(packageJson, this.compilationCallback.bind(this));
 
     }
 
@@ -63,13 +53,10 @@ export class TreeBuilder extends TreeExecutor {
      * Builds an entire repository
      */
     public async buildRepository(repoPath: string, forceAll: boolean = false): Promise<void> {
-        let repoPckg: TRepositorySpecs = await this.rsr.getRepositoryPackages(repoPath);
-        
+
         this.forceAll = forceAll;
 
-        for(var i=0;i < repoPckg.rootTrees.length; i++){
-            await this.buildPackage(repoPckg.rootTrees[i]);
-        }
+        await this.execCmdOnRepository(repoPath, this.buildPackage.bind(this));
 
     }
 

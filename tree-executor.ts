@@ -1,8 +1,12 @@
-import { TSpec, RepositorySpecsReader } from './repository-specs-reader';
-import { MapBasedDepthFirstSearch, TreeTraversalType } from 'ajlm.utils';
+import { TSpec, RepositorySpecsReader, TRepositorySpecs } from './repository-specs-reader';
+import { MapBasedDepthFirstSearch, TreeTraversalType, BreadthFirstSearch } from 'ajlm.utils';
 import { resolve, dirname } from 'path';
 import { Logger } from './logger';
 import { exec } from 'child_process';
+
+export type TTreeExecutionOptions = {
+    parallel?: boolean;
+};
 
 export class TreeExecutor {
 
@@ -34,46 +38,48 @@ export class TreeExecutor {
      * Executor of action against dependencies
      */
     protected dependenciesDfs: MapBasedDepthFirstSearch<TSpec> = 
-            new MapBasedDepthFirstSearch<TSpec>(this.dependenciesRetriever, this.nodeHasher);
+            new MapBasedDepthFirstSearch<TSpec>(this.dependenciesRetriever);
 
     /**
      * Executor of action against dependants
      */
     protected dependantsDfs: MapBasedDepthFirstSearch<TSpec> = 
-            new MapBasedDepthFirstSearch<TSpec>(this.dependantsRetriever, this.nodeHasher);
+            new MapBasedDepthFirstSearch<TSpec>(this.dependantsRetriever);
 
     constructor( ) {
     }
 
-    public async execCmdOnRepository(packageJson: string, command: string | ((node: TSpec) => Promise<void>)): Promise<void> {
-        let repo = await this.rsr.getRepositoryPackages(resolve(packageJson));
+    public async execCmdOnRepository(packageJson: string, 
+                                    command: string | ((node: TSpec) => Promise<void>),
+                                    options?: TTreeExecutionOptions): Promise<void> {
+        let repo: TRepositorySpecs = await this.rsr.getRepositoryPackages(resolve(packageJson));
 
-        let processedNodes: { [name: string]: TSpec; } = {};
-        
-        for(var i=0; i<repo.rootTrees.length; i++){
-            Logger.info(" *************** ");
-            await this.execCmdOnPackage(repo.rootTrees[i], async (node: TSpec)=>{
-                if( processedNodes[ node.name ] ){
-                    return;
-                }
+        // create a common root node to allow parallel compilation
 
-                processedNodes[ node.name ] = node;
+        let rootNode: TSpec = {
+            dependants: {},
+            dependencies: {},
+            name: `ROOT-${Date.now()}`,
+            path: null,
+            pkg: null,
+            isVirtual: true
+        };
 
-                if(typeof command == "string"){
-                    await this.execCmd(node, command as string);
-                } else {
-                    await command(node);
-                }
-                
-            });
-
+        for(var i=0; i<repo.rootTrees.length; i++) {
+            rootNode.dependencies[repo.rootTrees[i].name] = repo.rootTrees[i];
         }
+
+        await this.triggerCommand(rootNode, command, options);
+
+        
     }
 
     /**
      * Executes an action on each node following a DFS algorithm
      */
-    public async execCmdOnPackage( packageJson: string | TSpec, command: string | ((node: TSpec) => Promise<void>) ): Promise<void>{
+    public async execCmdOnPackage( packageJson: string | TSpec, 
+                                  command: string | ((node: TSpec) => Promise<void>),
+                                  options?: TTreeExecutionOptions ): Promise<void>{
         let specs: TSpec;
         
         if(typeof packageJson == "string"){
@@ -82,16 +88,8 @@ export class TreeExecutor {
             specs = <TSpec>packageJson;
         }
 
-        await this.dependenciesDfs.perform(specs, async (node: TSpec) => {
-
-            if(typeof command == "string"){
-                await this.execCmd(node, command as string);
-            } else {
-                await command(node);
-            }
-            
-
-        }, TreeTraversalType.PostOrder);
+        
+        await this.triggerCommand(specs, command, options);
     }
 
     /**
@@ -101,7 +99,7 @@ export class TreeExecutor {
 
         return new Promise<void>((resolve, reject)=>{
 
-            Logger.info(`\t**** Exec ${command} on ${node.name}`, { color: "whiteBright"});
+            Logger.info(`\tOPEN [${node.name}] ${command}`, { color: "whiteBright"});
 
             let childStart: number = Date.now();
             var child = exec(command, {
@@ -113,12 +111,92 @@ export class TreeExecutor {
 
             child.on('close', function(code) {
                 // Depending on code ... reject or resolve and display info
-                Logger.info(`\t**** End of ${command} on ${node.name}, code : ${code} / ${Date.now() - childStart} ms`, { color: "whiteBright"});
+                Logger.info(`\tCLOSE [${node.name}] ${command} , code : ${code} / ${Date.now() - childStart} ms`, { color: "whiteBright"});
                 
                 resolve();
                 
             });
         });
+    }
+
+    protected async triggerCommand( spec: TSpec, 
+                                command: string | ((node: TSpec) => Promise<void>),
+                                options?: TTreeExecutionOptions ): Promise<void> {
+        
+        let orderedNodes: TSpec[][] = 
+            await this.getSpecsInOrder(spec, options && options.parallel ? "parallel" : "sequential");
+
+        for(var i = 0; i< orderedNodes.length; i++){
+
+            await Promise.all( orderedNodes[i].map((node: TSpec)=>{
+
+                if(node.isVirtual){
+                    return;
+                }
+
+                if(typeof command == "string"){
+                    return this.execCmd(node, command as string);
+                } else {
+                    return command(node);
+                }
+            }));
+
+            Logger.info(" ******************************* ");
+        }
+    }
+
+    protected async getSpecsInOrder(root: TSpec, type: "parallel" | "sequential"): Promise<TSpec[][]> {
+        let grouped: { [key:string]: TSpec[]; } = {};
+        let nodeByLevel: { [name: string]: number; } = {};
+        let results: TSpec[][] = [];
+        
+        let bfs = new BreadthFirstSearch(this.dependenciesRetriever);
+        await bfs.perform(root, async (node: TSpec, parent: TSpec, level: number)=>{
+
+            if(!grouped[ level ]){
+                grouped[ level ] = [];
+            }
+
+            let formerLevel = nodeByLevel[ node.name ];
+
+            if(formerLevel === undefined){
+                
+                grouped[ level ].push(node);
+                nodeByLevel[ node.name ] = level;
+
+            } else if(formerLevel < level) {
+
+                nodeByLevel[ node.name ] = level;
+                let idx = grouped[ formerLevel ].findIndex(v => v.name == node.name );
+                grouped[ formerLevel ].splice(idx, 1);
+
+                grouped[ level ].push(node);
+
+            }
+            
+        });
+
+        // a high level means a higher priority in a BFS
+        results = Object.keys( grouped )
+            .sort( (a, b)=>{ return (+a) - (+b); })
+            .reverse()
+            .map(k => grouped[k].sort((n1, n2)=>{ return n1.name.localeCompare(n2.name);}));
+            
+        if(type == "sequential"){
+           
+            // flatten previous result
+            let newResults: TSpec[][] = [];
+
+            results.forEach((result)=>{
+                result.forEach((r)=>{
+                    newResults.push([r]);
+                });
+            });
+
+            results = newResults;
+        }
+
+        return results;   
     }
 
     /**

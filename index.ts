@@ -9,75 +9,102 @@ import { TSpec } from 'repository-specs-reader';
 
 // module entry point
 
+let actionsMap: { [actionKey: string] : (param: TCommandLineParameters) => Promise<void>;} = {
 
-// build all
-
-// push all (git based)
-
-let param: TCommandLineParameters = (new ParametersGetter()).getParameters();
-let tb: TreeBuilder = new TreeBuilder();
-
-let execute = async ( cb: () => Promise<void> ) => {
-
-    let now: number = Date.now();
-    await cb();
-    Logger.info(`Executed in ${Date.now() - now} ms`);
-};
-
-if(param["build"] && param["target"]) {
-    
-    execute( async () => {
-        let pck: string = param["target"];
+    "build_pkg" : async (param: TCommandLineParameters) => {
+        let pck: string = param["pkg"];
+        let tb: TreeBuilder = new TreeBuilder();
         await tb.buildPackage(pck);
-    });
-    
-}
+    },
 
-if(param["buildAll"] && param["target"]) {
+    "build_repo" : async (param: TCommandLineParameters) => {
+        let pck: string = param["repo"];
+        let tb: TreeBuilder = new TreeBuilder();
+        await tb.buildRepository(pck, param["forceAll"] == "true");
+    },
 
-    execute( async () => {
-        let pck: string = param["target"];
-        await tb.buildRepository(pck, param["forceAll"]);
-    });
-    
-}
-
-if(param["exec"] && param["target"]) {
-
-    execute( async () => {
-        let pck: string = param["target"];
+    "exec_pkg": async (param: TCommandLineParameters) => {
+        let pck: string = param["pkg"];
         let cmd: string = param["exec"];
 
         let tc = new TreeExecutor();
         
         await tc.execCmdOnPackage(pck, cmd);
-    });
-    
-}
+    },
 
-if(param["execAll"] && param["target"]) {
-
-    execute( async () => {
-        let pck: string = param["target"];
-        let cmd: string = param["execAll"];
+    "exec_repo": async (param: TCommandLineParameters) => {
+        let pck: string = param["repo"];
+        let cmd: string = param["exec"];
 
         let tc = new TreeExecutor();
         
         await tc.execCmdOnRepository(pck, cmd);
-    });
-    
-}
+    },
 
-if(param["enum"] && param["target"]) {
-
-    execute( async () => {
-        let pck: string = param["target"];
+    "enum_repo": async (param: TCommandLineParameters) => {
+        let pck: string = param["repo"];
 
         let tc = new TreeExecutor();
         
+        let options = {
+            "parallel" : param["parallel"] ? true : false
+        };
+        
         await tc.execCmdOnRepository(pck, async (node: TSpec)=>{
             Logger.info(node.name);
-        });
-    });
+        }, options);
+    },
+
+    "enum_pkg": async (param: TCommandLineParameters) => {
+        let pkg: string = param["pkg"];
+
+        let tc = new TreeExecutor();
+        let options = {
+            "parallel" : param["parallel"] ? true : false
+        };
+        
+        await tc.execCmdOnPackage(pkg, async (node: TSpec)=>{
+            Logger.info(node.name);
+        }, options);
+    }
+};
+
+let param: TCommandLineParameters = (new ParametersGetter()).getParameters();
+
+// Wrapper to know how much time we spent
+let execute = async ( cb: (param: TCommandLineParameters) => Promise<void> ) => {
+    Logger.info(`Starting tasks`);
+    let now: number = Date.now();
+    await cb(param);
+    Logger.info(`Executed in ${Date.now() - now} ms`);
+};
+
+// Find out which request to fill
+let fetchCommandLine = async () => {
+    for(var key in actionsMap){
+        let keys: string[] = key.split("_");
+        let action = actionsMap[key];
     
-}
+        let presentKeys = keys.filter(k => param[k] != undefined);
+    
+        if(presentKeys.length == keys.length){
+            await execute(action);
+            return;
+        }
+    }
+
+    throw new Error("Cannot Work with inputs");
+};
+
+// Start
+fetchCommandLine()
+    .catch((error)=>{
+        Logger.error(error.toString());
+    });
+
+
+
+// @TODO
+// build all
+
+// push all (git based)
