@@ -115,9 +115,9 @@ export class TreeExecutor {
             var child = exec(command, {
                 cwd: dirname(node.path)
             });
-            child.stdout.on('data', this.getProcessLogger("info"));
+            child.stdout.on('data', this.getProcessLogger("info", node.name));
             
-            child.stderr.on('data', this.getProcessLogger("error"));
+            child.stderr.on('data', this.getProcessLogger("error", node.name));
 
             child.on('close', function(code) {
                 // Depending on code ... reject or resolve and display info
@@ -245,12 +245,12 @@ export class TreeExecutor {
      * Generates a logger which sanitize a process output
      * before logging it
      */
-    protected getProcessLogger(level: "error" | "info") {
+    protected getProcessLogger(level: "error" | "info", prefix: string) {
 
         return (msg) => {
             let splitted: string[] = msg.toString()
                                         .split(/[\r\n]+/)
-                                        .map(s => `\t\t${s}`);
+                                        .map(s => `\t  [${prefix}] ${s}`);
 
             splitted.forEach(s => Logger.log(s, level, {color: "greenBright" }));
         };
