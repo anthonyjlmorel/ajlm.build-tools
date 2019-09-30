@@ -88,11 +88,8 @@ export class RepositorySpecsReader {
         let dfs = new MapBasedDepthFirstSearch<TSpec>( async (node: TSpec) => {
             let nodes = [];
 
-            let pckKeys: string[] = ["dependencies", "devDependencies"];
-
-            for(var i = 0;i < pckKeys.length; i++){
-                for(var dep in node.pkg[pckKeys[i]]) {
-                    let spec: TSpec,
+            await this.browsePackageDependencies(node.pkg, async (dep: string, version: string) => {
+                let spec: TSpec,
                         depFolder = dep;
     
                     // avoid re reading files twice
@@ -105,7 +102,7 @@ export class RepositorySpecsReader {
                         try{
                             await stat(filePath);
                         }catch(e){
-                            continue;
+                            return;
                         }
                         
                         let filePck = await readPackage( filePath );
@@ -120,9 +117,7 @@ export class RepositorySpecsReader {
                     }
                     
                     nodes.push(spec);
-                }
-            }
-            
+             });
 
             return nodes;
         });
@@ -176,17 +171,13 @@ export class RepositorySpecsReader {
          let dfs = new MapBasedDepthFirstSearch<TSpec>( async (node: TSpec) => {
              let nodes = [];
 
-             
-             if(!node.pkg.dependencies) { return nodes; }
+             await this.browsePackageDependencies(node.pkg, async (dep: string, version: string)=>{
+                if(!results.packagesMap[ dep ]){
+                    return;
+                }
 
-             for(var dep in node.pkg.dependencies){
-
-                 if(!results.packagesMap[ dep ]){
-                     continue;
-                 }
-
-                 nodes.push(results.packagesMap[ dep ]);
-             }
+                nodes.push(results.packagesMap[ dep ]);
+             });
 
              return nodes;
          });
@@ -269,4 +260,18 @@ export class RepositorySpecsReader {
         });
     }
 
+    private async browsePackageDependencies(pkg: ObjectLiteral, cb: (depName: string, version: string) => Promise<void>): Promise<void> {
+        let pckKeys: string[] = ["dependencies", "devDependencies"];
+
+        for(var i = 0;i < pckKeys.length; i++){
+            
+            if(!pkg[pckKeys[i]]) { 
+                continue; 
+            }
+
+            for(var dep in pkg[pckKeys[i]]) {
+                await cb(dep, pkg[pckKeys[i]][dep]);
+            }
+        }
+    }
 }

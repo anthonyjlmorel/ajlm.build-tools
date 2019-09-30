@@ -16,6 +16,7 @@ type TAllExecOptions = {
     }
 };
 
+// Cannot have All and Tree options at the same time
 export type TExecutionOptions = { forceAll?:boolean; } & (TTreeExecOptions | TAllExecOptions);
 
 export class TreeExecutor {
@@ -61,7 +62,7 @@ export class TreeExecutor {
 
     public async execCmdOnRepository(packageJson: string, 
                                     command: string | ((node: TSpec) => Promise<void>),
-                                    options?: TExecutionOptions): Promise<void> {
+                                    options: TExecutionOptions): Promise<void> {
         let repo: TRepositorySpecs = await this.rsr.getRepositoryPackages(resolve(packageJson));
 
         // create a common root node to allow parallel compilation
@@ -81,7 +82,6 @@ export class TreeExecutor {
 
         await this.triggerCommand(rootNode, command, options);
 
-        
     }
 
     /**
@@ -89,7 +89,7 @@ export class TreeExecutor {
      */
     public async execCmdOnPackage( packageJson: string | TSpec, 
                                   command: string | ((node: TSpec) => Promise<void>),
-                                  options?: TExecutionOptions ): Promise<void>{
+                                  options: TExecutionOptions ): Promise<void>{
         let specs: TSpec;
         
         if(typeof packageJson == "string"){
@@ -97,7 +97,6 @@ export class TreeExecutor {
         } else {
             specs = <TSpec>packageJson;
         }
-
         
         await this.triggerCommand(specs, command, options);
     }
@@ -154,11 +153,16 @@ export class TreeExecutor {
         }
     }
 
+    /**
+     * Returns a list of Spec to treat.
+     * The list order will depend on the passed options.
+     */
     protected async getSpecsInOrder(root: TSpec, options: TExecutionOptions): Promise<TSpec[][]> {
         let grouped: { [key:string]: TSpec[]; } = {};
         let nodeByLevel: { [name: string]: number; } = {};
         let results: TSpec[][] = [];
         
+        // Use a BFS algorithm to make parallelizable groups
         let bfs = new BreadthFirstSearch(this.dependenciesRetriever);
         await bfs.perform(root, async (node: TSpec, parent: TSpec, level: number)=>{
 
@@ -190,7 +194,8 @@ export class TreeExecutor {
             .sort( (a, b)=>{ return (+a) - (+b); })
             .reverse()
             .map(k => grouped[k].sort((n1, n2)=>{ return n1.name.localeCompare(n2.name);}));
-        
+
+        // if options is a tree,
         if((<TTreeExecOptions>options).tree){
 
             if((<TTreeExecOptions>options).tree.parallel){
@@ -211,6 +216,7 @@ export class TreeExecutor {
             return newResults;
         }
         
+        // Willing to exec all
         if((<TAllExecOptions>options).all){
             let uniqueCell: TSpec[] = [],
                 newResults: TSpec[][] = [uniqueCell];
@@ -242,7 +248,7 @@ export class TreeExecutor {
     }
 
     /**
-     * Generates a logger which sanitize a process output
+     * Generates a logger which sanitizes a process output
      * before logging it
      */
     protected getProcessLogger(level: "error" | "info", prefix: string) {

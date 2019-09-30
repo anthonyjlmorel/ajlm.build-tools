@@ -55,8 +55,8 @@ export class TreeBuilder extends TreeExecutor {
     public async buildRepository(repoPath: string, options: TExecutionOptions): Promise<void> {
 
         this.forceAll = options.forceAll === true;
-
-        await this.execCmdOnRepository(repoPath, this.buildPackage.bind(this), options);
+        this.forcedNodes = {};
+        await this.execCmdOnRepository(repoPath, this.compilationCallback.bind(this), options);
 
     }
 
@@ -161,7 +161,7 @@ export class TreeBuilder extends TreeExecutor {
      * Flags all node dependants as forced to be rebuilt.
      */
     private async forceNodeDependants(rootNode: TSpec): Promise<void>{        
-        this.dependantsDfs.perform(rootNode, async (node: TSpec, parent: TSpec)=>{
+        await this.dependantsDfs.perform(rootNode, async (node: TSpec, parent: TSpec)=>{
             
             if(node.name == rootNode.name){
                 return;

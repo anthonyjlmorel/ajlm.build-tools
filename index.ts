@@ -20,7 +20,7 @@ let actionsMap: { [actionKey: string] : (param: TCommandLineParameters, options:
     "build_repo" : async (param: TCommandLineParameters, options: TExecutionOptions) => {
         let pck: string = param["repo"];
         let tb: TreeBuilder = new TreeBuilder();
-        options.forceAll = param["forceAll"] == "true";
+        options.forceAll = param["forceAll"] != undefined;
         await tb.buildRepository(pck, options);
     },
 
@@ -79,7 +79,7 @@ let fetchCommandLine = async () => {
         let keys: string[] = key.split("_");
         let action = actionsMap[key];
         let options: TExecutionOptions = {
-            all: {
+            tree: {
                 parallel: true
             }
         };

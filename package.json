@@ -8,9 +8,13 @@
     "build": "npm run compile",
     "compile": "node ./node_modules/typescript/bin/tsc -p ."
   },
+  "files":[
+    "**/*.js",
+    "**/*.md"
+  ],
   "dependencies": {
-    "ajlm.utils": "^0.0.1",
-    "chalk": "^2.4.2",
+    "ajlm.utils": "~0.0.1",
+    "chalk": "~2.4.2",
     "folder-hash": "~3.2.0",
     "glob": "~7.1.2"
   },
