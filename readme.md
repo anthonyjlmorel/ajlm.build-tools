@@ -14,7 +14,7 @@
 
 *PATH_TO_REPO_PKG*: file path to repository package.json file
 
-Executes a command on a sub package dependency tree (starting from leaves):
+Executes a command on a sub package dependency tree:
 
 `` node index --exec CMD --pkg PATH_TO_PKG ``
 
@@ -22,7 +22,7 @@ Executes a command on a repository packages following dependency tree:
 
 `` node index --exec CMD --repo PATH_TO_REPO_PKG ``
 
-Builds a sub package dependency tree (starting from leaves):
+Builds a sub package dependency tree:
 
 `` node index --build --pkg PATH_TO_PKG ``
 
@@ -35,8 +35,8 @@ In build commands, a hash is computed to avoid building a package after successi
 ### Additional flags:
 By Default, commands are executed following the dependencies tree structure of packages, trying to parallelize what can be. If you want to change the behavior:
 
-- ``--tree``: instructs to follow the tree structure
-- ``--all``: instructs not to follow the tree structure
+- ``--tree``: instructs to follow dependencies tree structure
+- ``--all``: instructs not to follow dependencies tree structure
 - ``--parallel``: instructs to parallelize what can be depending on the context (cannot be used without ``all`` or ``tree``)
 
 ```javascript
