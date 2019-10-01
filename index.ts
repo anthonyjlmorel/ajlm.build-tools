@@ -1,5 +1,4 @@
 
-import { resolve, join, dirname } from "path";
 import { ParametersGetter, TCommandLineParameters } from 'ajlm.utils';
 import { TreeBuilder } from "./tree-builder";
 import { Logger } from './logger';
@@ -116,10 +115,3 @@ fetchCommandLine()
     .catch((error)=>{
         Logger.error(error.toString());
     });
-
-
-
-// @TODO
-// build all
-
-// push all (git based)

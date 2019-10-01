@@ -4,6 +4,7 @@ import { resolve, dirname } from 'path';
 import { Logger } from './logger';
 import { exec } from 'child_process';
 
+// Define accepted options
 type TTreeExecOptions = {
     tree: {
         parallel?: boolean;
@@ -19,6 +20,11 @@ type TAllExecOptions = {
 // Cannot have All and Tree options at the same time
 export type TExecutionOptions = { forceAll?:boolean; } & (TTreeExecOptions | TAllExecOptions);
 
+/**
+ * 
+ * Defines executable actions against a dependencies Tree structure
+ * 
+ */
 export class TreeExecutor {
 
     /**
@@ -106,6 +112,8 @@ export class TreeExecutor {
      */
     protected execCmd(node: TSpec, command: string): Promise<void>{
 
+        // @TODO better handling of child error
+
         return new Promise<void>((resolve, reject)=>{
 
             Logger.info(`\tOPEN [${node.name}] ${command}`, { color: "whiteBright"});
@@ -137,6 +145,10 @@ export class TreeExecutor {
 
         for(var i = 0; i< orderedNodes.length; i++) {
 
+            // @TODO better handling of child error
+            //       IDEA: if a node errors, just stop process only
+            //              of the dependencies of that node but allow
+            //              other part of the tree to continue
             await Promise.all( orderedNodes[i].map((node: TSpec)=>{
 
                 if(node.isVirtual){

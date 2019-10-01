@@ -11,7 +11,9 @@ let readFile = promisify(formerReadFile);
 let writeFile = promisify(formerWriteFile);
 
 /**
- * Class used to execute a build action against a dependencies tree
+ * Class used to execute a build action against a dependencies tree.
+ * It adds a hash file to each package to know which one has not changed
+ * avoiding a re compilation
  */
 export class TreeBuilder extends TreeExecutor {
 
@@ -22,10 +24,10 @@ export class TreeBuilder extends TreeExecutor {
      *      Exclude hash file name from this
      */
     private static readonly HASH_FILE_NAME: string = ".hash";
-    private static readonly EXCLUDED_FOLDERS_FROM_HASH: string[] = ['.*', 'node_modules', "dist", "lib"];
+    private static readonly EXCLUDED_FOLDERS_FROM_HASH: string[] = ['.*', 'node_modules', "dist", "lib", "bundle", "logs"];
     private static readonly EXCLUDED_FILES_FROM_HASH: string[] = [".*"];
     private static readonly BUILD_CMD: string = "npm run build";
-
+    private static readonly FORCE_DEPENDANTS_ON_CHANGE: boolean = true;
     
     /**
      * In case of a recompiled node, flags all dependants as to recompile
@@ -160,7 +162,12 @@ export class TreeBuilder extends TreeExecutor {
     /**
      * Flags all node dependants as forced to be rebuilt.
      */
-    private async forceNodeDependants(rootNode: TSpec): Promise<void>{        
+    private async forceNodeDependants(rootNode: TSpec): Promise<void> {
+        
+        if(!TreeBuilder.FORCE_DEPENDANTS_ON_CHANGE){
+            return;
+        }
+
         await this.dependantsDfs.perform(rootNode, async (node: TSpec, parent: TSpec)=>{
             
             if(node.name == rootNode.name){

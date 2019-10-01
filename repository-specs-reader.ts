@@ -6,34 +6,62 @@ import * as glob from "glob";
 
 import { TreeTraversalType, MapBasedDepthFirstSearch } from "ajlm.utils";
 
+// Promisify nodejs methods
 let readFile = promisify(formerReadFile);
 let stat = promisify(formerStat);
 
+// Define a map
 type ObjectLiteral = { [key: string]: any; };
 
+// Define a spec
 export type TSpec = {
-    name: string;
-    path: string;
-    pkg: ObjectLiteral; // package.json file
-    dependencies: { [pkgName: string]: TSpec };
-    dependants: { [pkgName: string]: TSpec };
-    isVirtual?: boolean;
+    name: string;                                       // name of package
+    path: string;                                       // path to package.json file
+    pkg: ObjectLiteral;                                 // package.json file content, parsed
+    dependencies: { [pkgName: string]: TSpec };         // dependencies
+    dependants: { [pkgName: string]: TSpec };           // dependants
+    isVirtual?: boolean;                                // true if this node has no package.json
 };
 
+// Define a repository
 export type TRepositorySpecs = {
-    packagesMap: { [pkgName: string]: TSpec; };
-    rootTrees: TSpec[];
+    packagesMap: { [pkgName: string]: TSpec; };         // all packages of repo
+    rootTrees: TSpec[];                                 // all packages of repo that have no dependants
 };
 
+/**
+ * Class in charge of reading specifications (package.json)
+ * and their relations (dependencies, dependants) of a specific package
+ * or an entire repository.
+ * 
+ * This allows to build a Tree structure representing the dependencies and to make
+ * the base structure to execute operations on a package or a repo.
+ * 
+ */
 export class RepositorySpecsReader {
 
+    // handler for building relations between specs
+    private readonly buildParentDependantsTree: (node: TSpec, parent: TSpec) => Promise<void> 
+    = async (node: TSpec, parent: TSpec) => {
+        if(!parent){
+            return;
+        }
+
+        if(!node.dependants[ parent.name ]) {
+            node.dependants[ parent.name ] = parent;
+        }
+
+        if(!parent.dependencies[ node.name ]){
+            parent.dependencies[ node.name ] = node;
+        }
+    };
 
     /**
      * Retrieves all specs from all packages in a mono repository
      */
     public async getRepositoryPackages(repositoryPackageJsonPath: string): Promise<TRepositorySpecs> {
         
-        let pkgFiles: string[] = await this.getPackagesFilesList(repositoryPackageJsonPath);
+        let pkgFiles: string[] = await this.getRepoPackagesFilesList(repositoryPackageJsonPath);
 
         let result = await this.getAllSpecs(pkgFiles);
         return result;
@@ -49,18 +77,13 @@ export class RepositorySpecsReader {
                     pck = JSON.parse(pckContent);
                 return pck;
             },
-            repoPath: string = normalize(`${packagePath}/../..`), // @TODO I am wondering if it is not a specificity ...
-            readPackages: ObjectLiteral = {
-                
-            };
-        
-        if(basename(repoPath) == "@types"){
-            // @TODO I am wondering if it is not a specificity ...
-            repoPath = normalize(`${packagePath}/../../..`)
-        }
+            repoPath: string = await this.findRepositoryPackagesDirectory(packagePath),
+            readPackages: ObjectLiteral = { };
 
+        // read the package file
         let pck = await readPackage(packagePath);
 
+        // init result for DFS algorithm
         let result: TSpec = {
                 name: pck.name,
                 path: packagePath,
@@ -71,23 +94,9 @@ export class RepositorySpecsReader {
        
         readPackages[ pck.name ] = result;
 
-        let buildParentDependantsTree = async (node: TSpec, parent: TSpec) => {
-            if(!parent){
-                return;
-            }
-
-            if(!node.dependants[ parent.name ]) {
-                node.dependants[ parent.name ] = parent;
-            }
-
-            if(!parent.dependencies[ node.name ]){
-                parent.dependencies[ node.name ] = node;
-            }
-        };
-
+        // using a DFS to map relations
         let dfs = new MapBasedDepthFirstSearch<TSpec>( async (node: TSpec) => {
             let nodes = [];
-
             await this.browsePackageDependencies(node.pkg, async (dep: string, version: string) => {
                 let spec: TSpec,
                         depFolder = dep;
@@ -102,6 +111,7 @@ export class RepositorySpecsReader {
                         try{
                             await stat(filePath);
                         }catch(e){
+                            
                             return;
                         }
                         
@@ -122,12 +132,15 @@ export class RepositorySpecsReader {
             return nodes;
         });
 
-        await dfs.perform(result, buildParentDependantsTree, TreeTraversalType.PostOrder);
-
+        // trigger traversal
+        await dfs.perform(result, this.buildParentDependantsTree, TreeTraversalType.PostOrder);
 
         return result;
     }
 
+    /**
+     * Triggers a reading process of all package.json files and loads their relations
+     */
     private async getAllSpecs(files: string[]): Promise<TRepositorySpecs> {
         let results: TRepositorySpecs = {
             packagesMap: {},
@@ -154,20 +167,8 @@ export class RepositorySpecsReader {
                 });
             })
          );
-         let buildParentDependantsTree = async (node: TSpec, parent: TSpec) => {
-            if(!parent){
-                return;
-            }
-
-            if(!node.dependants[ parent.name ]) {
-                node.dependants[ parent.name ] = parent;
-            }
-
-            if(!parent.dependencies[ node.name ]){
-                parent.dependencies[ node.name ] = node;
-            }
-        };
-
+         
+         // loads relation with a DFS
          let dfs = new MapBasedDepthFirstSearch<TSpec>( async (node: TSpec) => {
              let nodes = [];
 
@@ -185,9 +186,10 @@ export class RepositorySpecsReader {
 
          // create relationships in the trees
          for(var k in results.packagesMap) {
-            await dfs.perform(results.packagesMap[k], buildParentDependantsTree, TreeTraversalType.PostOrder);
+            await dfs.perform(results.packagesMap[k], this.buildParentDependantsTree, TreeTraversalType.PostOrder);
          }
 
+         // determine root packages (those with no dependants)
          for(var k in results.packagesMap) {
              if( !Object.keys( results.packagesMap[ k ].dependants ).length ){
                  results.rootTrees.push(results.packagesMap[ k ]);
@@ -199,7 +201,13 @@ export class RepositorySpecsReader {
     }
 
 
-    private async getPackagesFilesList(packageJsonRepoPath: string): Promise<string[]> {
+    /**
+     * Retrives all package files from a repository.
+     * 
+     * It tries to read the json file of the repository and find out where the packages are
+     * before globbing them.
+     */
+    private async getRepoPackagesFilesList(packageJsonRepoPath: string): Promise<string[]> {
         
         packageJsonRepoPath = resolve(packageJsonRepoPath);
 
@@ -219,6 +227,9 @@ export class RepositorySpecsReader {
         return results;
     }
 
+    /**
+     * Globs package.json files from mono repo packages path.
+     */
     private globPackages(packagePath: string, entry: string): Promise<string[]>{
         return new Promise<string[]>((resolve, reject)=>{
            
@@ -235,13 +246,7 @@ export class RepositorySpecsReader {
                 absolute: true,
                 stat: false,
                 ignore: [
-                    /* "./node_modules/**",
-                    "./dist/**",
-                    "./bin/**",
-                    "./lib/**",
-                    "./bundle/**",
-                    "./logs/**",
-                    "./cfg/**",*/
+                    // @todo make this customizable ?
                     "**/node_modules/**",
                     "**/dist/**",
                     "**/bin/**",
@@ -260,6 +265,9 @@ export class RepositorySpecsReader {
         });
     }
 
+    /**
+     * Browses a package dependencies (devDependencie and dependencies)
+     */
     private async browsePackageDependencies(pkg: ObjectLiteral, cb: (depName: string, version: string) => Promise<void>): Promise<void> {
         let pckKeys: string[] = ["dependencies", "devDependencies"];
 
@@ -273,5 +281,39 @@ export class RepositorySpecsReader {
                 await cb(dep, pkg[pckKeys[i]][dep]);
             }
         }
+    }
+
+    /**
+     * Tries to find out the repo packages folder file from a sub package file
+     */
+    private async findRepositoryPackagesDirectory(subPackagePath: string): Promise<string>{
+        
+        let previousPath: string = subPackagePath,
+            pathToPackage: string = normalize(`${ dirname(subPackagePath) }/../package.json`);
+
+        do {
+            
+            try {
+                let fileContent: string = await readFile(pathToPackage, "utf8");
+                let pkg = JSON.parse(fileContent);
+    
+                if(pkg.workspaces != undefined){
+                    // we are in a yarn package
+                    // return workspace packages directory
+                    return dirname(previousPath);
+                }
+                else {
+                    // found a not related package file
+                    // throw error to pass in the following catch
+                    throw new Error("Not Related");
+                }
+            } catch(e){
+                previousPath = pathToPackage;
+                pathToPackage = normalize(`${dirname(pathToPackage)}/../package.json`);
+            }
+        }
+        while(previousPath != pathToPackage);
+        
+        throw new Error("Workspace not found");
     }
 }
