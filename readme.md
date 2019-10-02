@@ -3,7 +3,6 @@
 ### Conventions
 
 - Repositories follow the **Yarn Workspaces *standard***
-- @types packages are not *compiled*
 - All workspace packages are compiled using ``npm run build``, hence this command must be present in their **package.json** file
 
 ### Commands
@@ -61,7 +60,6 @@ node index --build --pkg PATH_TO_PKG --all --parallelize
 - use a non-recursive version of DFS for huge repositories (sensing a perf issue here)
 
 - make customizable some stuffs like : 
-1. build command, do we compile @types, ... see @todo in code.
+1. build command, ... see @todo in code.
 2. do we force dependants to rebuild if a dependencies changed
-
 - do we implement specific stuff like adding dependencies in sub packages or bumping versions ?

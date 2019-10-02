@@ -26,7 +26,7 @@ export class TreeBuilder extends TreeExecutor {
     private static readonly HASH_FILE_NAME: string = ".hash";
     private static readonly EXCLUDED_FOLDERS_FROM_HASH: string[] = ['.*', 'node_modules', "dist", "lib", "bundle", "logs"];
     private static readonly EXCLUDED_FILES_FROM_HASH: string[] = [".*"];
-    private static readonly BUILD_CMD: string = "npm run build";
+    private static readonly NPM_BUILD_SCRIPT: string = "build";
     private static readonly FORCE_DEPENDANTS_ON_CHANGE: boolean = true;
     
     /**
@@ -97,10 +97,21 @@ export class TreeBuilder extends TreeExecutor {
      */
     private async compile(node: TSpec): Promise<void>{
         
-        let command: string = TreeBuilder.BUILD_CMD;
+        let script: string = TreeBuilder.NPM_BUILD_SCRIPT,
+            command: string = `npm run ${script}`;
 
-        if(node.name.indexOf("@types") > -1) {
-            // @TODO maybe some guys actually "compile" their @types ...
+        // check that, in case of npm script, it exists
+        // in pkg
+        
+        if(!node.pkg.scripts){
+            // no scripts tag in package
+            Logger.info(`No scripts entry in ${node.name}, Skipping`);
+            return;
+        }
+        
+        if(!node.pkg.scripts[script]){
+            Logger.info(`Script ${script} not available in ${node.name}, skipping`);
+            // script not present in package
             return;
         }
 
