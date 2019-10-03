@@ -1,10 +1,10 @@
 
 import { readFile as formerReadFile, stat as formerStat } from "fs";
 import { promisify } from "util";
-import { dirname, resolve, normalize, basename, join } from "path";
+import { dirname, resolve, normalize, join } from "path";
 import * as glob from "glob";
 
-import { TreeTraversalType, MapBasedDepthFirstSearch } from "ajlm.utils";
+import { TreeTraversalType, DepthFirstSearch } from "ajlm.utils";
 
 // Promisify nodejs methods
 let readFile = promisify(formerReadFile);
@@ -94,46 +94,68 @@ export class RepositorySpecsReader {
        
         readPackages[ pck.name ] = result;
 
+        // declare a parent/child map to detect cycles
+        let parentChildMap: { [name: string]: string; } = {};
         // using a DFS to map relations
-        let dfs = new MapBasedDepthFirstSearch<TSpec>( async (node: TSpec) => {
-            let nodes = [];
-            await this.browsePackageDependencies(node.pkg, async (dep: string, version: string) => {
-                let spec: TSpec,
-                        depFolder = dep;
-    
-                    // avoid re reading files twice
-                    spec = readPackages[dep];
-    
-                    if(!spec) {
-    
-                        let filePath = join(repoPath,"/", depFolder, "/package.json");
-    
-                        try{
-                            await stat(filePath);
-                        }catch(e){
+        let dfs = new DepthFirstSearch<TSpec>( 
+            { 
+                getNodeHash: async (node: TSpec) => { return node.name; },
+                adjacentNodeGetter: async (node: TSpec) => {
+                    let nodes = [];
+                    await this.browsePackageDependencies(node.pkg, async (dep: string, version: string) => {
+                        let spec: TSpec,
+                                depFolder = dep;
+            
+                            // avoid re reading files twice
+                            spec = readPackages[dep];
+            
+                            if(!spec) {
+            
+                                let filePath = join(repoPath,"/", depFolder, "/package.json");
+            
+                                try{
+                                    await stat(filePath);
+                                }catch(e){
+                                    
+                                    return;
+                                }
+                                
+                                let filePck = await readPackage( filePath );
+                                spec = {
+                                    name: filePck.name,
+                                    pkg: filePck,
+                                    path: filePath,
+                                    dependants: {},
+                                    dependencies: {}
+                                };
+                                readPackages[ spec.name ] = spec;
+                            }
                             
-                            return;
-                        }
-                        
-                        let filePck = await readPackage( filePath );
-                        spec = {
-                            name: filePck.name,
-                            pkg: filePck,
-                            path: filePath,
-                            dependants: {},
-                            dependencies: {}
-                        };
-                        readPackages[ spec.name ] = spec;
-                    }
-                    
-                    nodes.push(spec);
-             });
+                            nodes.push(spec);
+                    });
 
-            return nodes;
-        });
+                    return nodes;
+                },
+                processNode: async (node: TSpec)=>{
+                    // nothing ...
+                },
+                processEdge: async (parent: TSpec, child: TSpec)=>{
+                    /*
+                    console.log(child.name + " -> " + parent.name);
+                    
+                    
+                    let isDiscovered = await dfs["isNodeDiscovered"](child);
+                    if(isDiscovered && dfs["parentMap"][parent.name] != child.name){
+                        console.log(dfs["parentMap"]);
+                        throw new Error("Cycle Detected");
+                    }*/
+
+                    await this.buildParentDependantsTree(child, parent);
+                }
+            });
 
         // trigger traversal
-        await dfs.perform(result, this.buildParentDependantsTree, TreeTraversalType.PostOrder);
+        await dfs.perform(result, TreeTraversalType.PostOrder);
 
         return result;
     }
@@ -169,24 +191,35 @@ export class RepositorySpecsReader {
          );
          
          // loads relation with a DFS
-         let dfs = new MapBasedDepthFirstSearch<TSpec>( async (node: TSpec) => {
-             let nodes = [];
+         let dfs = new DepthFirstSearch<TSpec>( 
+             {
+                 getNodeHash: async (node: TSpec) => { return node.name; },
+                 adjacentNodeGetter: async (node: TSpec) => {
+                    let nodes = [];
 
-             await this.browsePackageDependencies(node.pkg, async (dep: string, version: string)=>{
-                if(!results.packagesMap[ dep ]){
-                    return;
+                    await this.browsePackageDependencies(node.pkg, async (dep: string, version: string)=>{
+                        if(!results.packagesMap[ dep ]){
+                            return;
+                        }
+
+                        nodes.push(results.packagesMap[ dep ]);
+                    });
+
+                    return nodes;
+                },
+                processNode: async (node: TSpec) => {
+                    // nothing
+                },
+                processEdge: async (parent: TSpec, child: TSpec) => {
+                    await this.buildParentDependantsTree(child, parent);
                 }
-
-                nodes.push(results.packagesMap[ dep ]);
-             });
-
-             return nodes;
-         });
+            }
+        );
 
 
          // create relationships in the trees
          for(var k in results.packagesMap) {
-            await dfs.perform(results.packagesMap[k], this.buildParentDependantsTree, TreeTraversalType.PostOrder);
+            await dfs.perform(results.packagesMap[k], TreeTraversalType.PostOrder);
          }
 
          // determine root packages (those with no dependants)

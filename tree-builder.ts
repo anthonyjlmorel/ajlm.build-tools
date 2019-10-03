@@ -1,10 +1,10 @@
-import { RepositorySpecsReader, TSpec, TRepositorySpecs } from './repository-specs-reader';
-import { readFile as formerReadFile, writeFile as formerWriteFile, write } from "fs";
-import { resolve, join, dirname } from "path";
+import { TSpec } from './repository-specs-reader';
+import { readFile as formerReadFile, writeFile as formerWriteFile } from "fs";
+import { join, dirname } from "path";
 import { promisify } from "util";
 import { hashElement } from "folder-hash";
 import { Logger } from './logger';
-import { TreeTraversalType } from 'ajlm.utils';
+import { TreeTraversalType, DepthFirstSearch } from 'ajlm.utils';
 import { TreeExecutor, TExecutionOptions } from './tree-executor';
 
 let readFile = promisify(formerReadFile);
@@ -179,13 +179,18 @@ export class TreeBuilder extends TreeExecutor {
             return;
         }
 
-        await this.dependantsDfs.perform(rootNode, async (node: TSpec, parent: TSpec)=>{
-            
-            if(node.name == rootNode.name){
-                return;
+        let dfs = new DepthFirstSearch<TSpec>({
+            getNodeHash: this.nodeHasher,
+            adjacentNodeGetter: this.dependantsRetriever,
+            processNode: async (node: TSpec) => {
+                if(node.name == rootNode.name){
+                    return;
+                }
+                
+                this.forcedNodes[ node.name ] = node;
             }
-            
-            this.forcedNodes[ node.name ] = node;
-        }, TreeTraversalType.PostOrder);
+        });
+
+        await dfs.perform(rootNode, TreeTraversalType.PostOrder);
     }
 }

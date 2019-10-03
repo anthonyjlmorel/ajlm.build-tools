@@ -2,7 +2,7 @@
 import { ParametersGetter, TCommandLineParameters } from 'ajlm.utils';
 import { TreeBuilder } from "./tree-builder";
 import { Logger } from './logger';
-import { TreeExecutor, TExecutionOptions } from './tree-executor';
+import { TreeExecutor, TExecutionOptions, TTreeExecOptions, TAllExecOptions } from './tree-executor';
 import { TSpec } from 'repository-specs-reader';
 
 
@@ -46,9 +46,7 @@ let actionsMap: { [actionKey: string] : (param: TCommandLineParameters, options:
 
         let tc = new TreeExecutor();
         
-        await tc.execCmdOnRepository(pck, async (node: TSpec)=>{
-            Logger.info(node.name);
-        }, options);
+        await tc.execCmdOnRepository(pck, getNodeEnumerator(options), options);
     },
 
     "enum_pkg": async (param: TCommandLineParameters, options: TExecutionOptions) => {
@@ -56,13 +54,33 @@ let actionsMap: { [actionKey: string] : (param: TCommandLineParameters, options:
 
         let tc = new TreeExecutor();
         
-        await tc.execCmdOnPackage(pkg, async (node: TSpec)=>{
-            Logger.info(node.name);
-        }, options);
+        await tc.execCmdOnPackage(pkg, getNodeEnumerator(options), options);
     }
 };
 
 let param: TCommandLineParameters = (new ParametersGetter()).getParameters();
+
+// Return a method that enumerate package names
+// Depending on exec options, print delimiters for grouped nodes
+let getNodeEnumerator: (options: TExecutionOptions) => (node: TSpec, index: number, group: TSpec[])=> Promise<void> = 
+(options: TExecutionOptions) => {
+    let isGrouped: boolean = false;
+    
+    if((<TTreeExecOptions>options).tree){
+        isGrouped = true;
+    }
+
+    return async (node: TSpec, index: number, group: TSpec[]) => {
+        
+        if(isGrouped && index == 0){
+            Logger.info(`** Group`);
+        }
+        Logger.info(`\t${node.name}`);
+        if(isGrouped && index == group.length - 1){
+            Logger.info(`** End`);
+        }
+    };
+};
 
 // Wrapper to know how much time we spent
 let execute = async ( cb: (param: TCommandLineParameters, options: TExecutionOptions) => Promise<void>, options: TExecutionOptions ) => {

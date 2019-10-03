@@ -3,15 +3,16 @@
   "compilerOptions": {
     "baseUrl": "./",
     "outDir": "./",
+    "module": "commonjs",
     "sourceMap": true,
     "declaration": false,
     "moduleResolution": "node",
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "importHelpers": true,
-    "target": "ES5",
+    "target": "ES2017",
     "lib": [
-      "es6"
+      "es2017"
     ]
   },
   "include":["./**/*.ts"],

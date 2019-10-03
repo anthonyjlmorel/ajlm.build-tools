@@ -1,17 +1,17 @@
 import { TSpec, RepositorySpecsReader, TRepositorySpecs } from './repository-specs-reader';
-import { MapBasedDepthFirstSearch, BreadthFirstSearch } from 'ajlm.utils';
+import { BreadthFirstSearch, TreeTraversalType } from 'ajlm.utils';
 import { resolve, dirname } from 'path';
 import { Logger } from './logger';
 import { exec } from 'child_process';
 
 // Define accepted options
-type TTreeExecOptions = {
+export type TTreeExecOptions = {
     tree: {
         parallel?: boolean;
     }
 };
 
-type TAllExecOptions = {
+export type TAllExecOptions = {
     all: {
         parallel?: boolean;
     }
@@ -51,23 +51,12 @@ export class TreeExecutor {
      */
     protected rsr: RepositorySpecsReader = new RepositorySpecsReader();
 
-    /**
-     * Executor of action against dependencies
-     */
-    protected dependenciesDfs: MapBasedDepthFirstSearch<TSpec> = 
-            new MapBasedDepthFirstSearch<TSpec>(this.dependenciesRetriever);
-
-    /**
-     * Executor of action against dependants
-     */
-    protected dependantsDfs: MapBasedDepthFirstSearch<TSpec> = 
-            new MapBasedDepthFirstSearch<TSpec>(this.dependantsRetriever);
-
+    
     constructor( ) {
     }
 
     public async execCmdOnRepository(packageJson: string, 
-                                    command: string | ((node: TSpec) => Promise<void>),
+                                    command: string | ((node: TSpec, index:number, collection: TSpec[]) => Promise<void>),
                                     options: TExecutionOptions): Promise<void> {
         let repo: TRepositorySpecs = await this.rsr.getRepositoryPackages(resolve(packageJson));
 
@@ -94,7 +83,7 @@ export class TreeExecutor {
      * Executes an action on each node following a DFS algorithm
      */
     public async execCmdOnPackage( packageJson: string | TSpec, 
-                                  command: string | ((node: TSpec) => Promise<void>),
+                                  command: string | ((node: TSpec, index:number, collection: TSpec[]) => Promise<void>),
                                   options: TExecutionOptions ): Promise<void>{
         let specs: TSpec;
         
@@ -137,7 +126,7 @@ export class TreeExecutor {
     }
 
     protected async triggerCommand( spec: TSpec, 
-                                command: string | ((node: TSpec) => Promise<void>),
+                                command: string | ((node: TSpec, index:number, collection: TSpec[]) => Promise<void>),
                                 options: TExecutionOptions ): Promise<void> {
                                             
         let orderedNodes: TSpec[][] = 
@@ -149,7 +138,7 @@ export class TreeExecutor {
             //       IDEA: if a node errors, just stop process only
             //              of the dependencies of that node but allow
             //              other part of the tree to continue
-            await Promise.all( orderedNodes[i].map((node: TSpec)=>{
+            await Promise.all( orderedNodes[i].map((node: TSpec, index: number, col: TSpec[]) => {
 
                 if(node.isVirtual){
                     return;
@@ -158,7 +147,7 @@ export class TreeExecutor {
                 if(typeof command == "string"){
                     return this.execCmd(node, command as string);
                 } else {
-                    return command(node);
+                    return command(node, index, col);
                 }
             }));
 
@@ -175,31 +164,65 @@ export class TreeExecutor {
         let results: TSpec[][] = [];
         
         // Use a BFS algorithm to make parallelizable groups
-        let bfs = new BreadthFirstSearch(this.dependenciesRetriever);
-        await bfs.perform(root, async (node: TSpec, parent: TSpec, level: number)=>{
-
-            if(!grouped[ level ]){
-                grouped[ level ] = [];
-            }
-
-            let formerLevel = nodeByLevel[ node.name ];
-
-            if(formerLevel === undefined){
+        let pushNodeInLevel = async (node: TSpec, level: number) => {
                 
-                grouped[ level ].push(node);
-                nodeByLevel[ node.name ] = level;
+                if(!grouped[ level ]){
+                    grouped[ level ] = [];
+                }
 
-            } else if(formerLevel < level) {
+                let formerLevel = nodeByLevel[ node.name ];
 
-                nodeByLevel[ node.name ] = level;
-                let idx = grouped[ formerLevel ].findIndex(v => v.name == node.name );
-                grouped[ formerLevel ].splice(idx, 1);
+                if(formerLevel === undefined){
+                    grouped[ level ].push(node);
+                    nodeByLevel[ node.name ] = level;
 
-                grouped[ level ].push(node);
+                } else if(formerLevel < level) {
+                   
+                    // Swapping this node and its dependencies
+                    let swap = (node, newLevel)=>{
+                        
+                        let formerNodeLevel = nodeByLevel[node.name];
+                        nodeByLevel[ node.name ] = newLevel;
 
-            }
-            
-        });
+                        if(formerNodeLevel !== undefined){
+                            let idx = grouped[ formerNodeLevel ].findIndex(v => v.name == node.name );
+                            grouped[ formerNodeLevel ].splice(idx, 1);
+                        }
+                    
+                        if(!grouped[newLevel]){ grouped[newLevel] = []; }
+                        grouped[ newLevel ].push(node);
+
+                    };
+                    
+                    let anotherBfs = new BreadthFirstSearch({ 
+                        getNodeHash: this.nodeHasher,
+                        adjacentNodeGetter: this.dependenciesRetriever,
+                        processNode: async (node: TSpec) => {
+                            // nothing
+                        },
+                        processEdge: async (parent: TSpec, node: TSpec, currentLevel: number) => {
+                            swap(node, level + currentLevel);
+                        }
+                    });
+
+                    swap(node, level);
+
+                    await anotherBfs.perform(node, TreeTraversalType.PreOrder);
+                }
+            },
+            bfs = new BreadthFirstSearch({ 
+                getNodeHash: this.nodeHasher,
+                adjacentNodeGetter: this.dependenciesRetriever,
+                processNode: async (node: TSpec) => {
+                    // nothing
+                },
+                processEdge: async (parent: TSpec, node: TSpec, level: number) => {
+                    await pushNodeInLevel(parent, level - 1);
+                    await pushNodeInLevel(node, level);
+                }
+            });
+
+        await bfs.perform(root, TreeTraversalType.PreOrder);
 
         // a high level means a higher priority in a BFS
         results = Object.keys( grouped )
