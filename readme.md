@@ -43,13 +43,13 @@ By Default, commands are executed following the dependencies tree structure of p
 node index --build --pkg PATH_TO_PKG --tree
 
 // Execute build following tree structure parallelizing siblings
-node index --build --pkg PATH_TO_PKG --tree --parallelize
+node index --build --pkg PATH_TO_PKG --tree --parallel
 
 // Execute build package by package (regardless of dependency relations)
 node index --build --pkg PATH_TO_PKG --all
 
 // Execute build triggering all packages at the same time (regardless of dependency relations)
-node index --build --pkg PATH_TO_PKG --all --parallelize
+node index --build --pkg PATH_TO_PKG --all --parallel
 
 ```
 
