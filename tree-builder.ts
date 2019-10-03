@@ -4,7 +4,7 @@ import { join, dirname } from "path";
 import { promisify } from "util";
 import { hashElement } from "folder-hash";
 import { Logger } from './logger';
-import { TreeTraversalType, DepthFirstSearch } from 'ajlm.utils';
+import { TraversalType, DepthFirstSearch } from 'ajlm.utils';
 import { TreeExecutor, TExecutionOptions } from './tree-executor';
 
 let readFile = promisify(formerReadFile);
@@ -191,6 +191,6 @@ export class TreeBuilder extends TreeExecutor {
             }
         });
 
-        await dfs.perform(rootNode, TreeTraversalType.PostOrder);
+        await dfs.perform(rootNode, TraversalType.PostOrder);
     }
 }

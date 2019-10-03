@@ -1,5 +1,5 @@
 import { TSpec, RepositorySpecsReader, TRepositorySpecs } from './repository-specs-reader';
-import { BreadthFirstSearch, TreeTraversalType } from 'ajlm.utils';
+import { BreadthFirstSearch, TraversalType } from 'ajlm.utils';
 import { resolve, dirname } from 'path';
 import { Logger } from './logger';
 import { exec } from 'child_process';
@@ -207,7 +207,7 @@ export class TreeExecutor {
 
                     swap(node, level);
 
-                    await anotherBfs.perform(node, TreeTraversalType.PreOrder);
+                    await anotherBfs.perform(node, TraversalType.PreOrder);
                 }
             },
             bfs = new BreadthFirstSearch({ 
@@ -222,7 +222,7 @@ export class TreeExecutor {
                 }
             });
 
-        await bfs.perform(root, TreeTraversalType.PreOrder);
+        await bfs.perform(root, TraversalType.PreOrder);
 
         // a high level means a higher priority in a BFS
         results = Object.keys( grouped )

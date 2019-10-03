@@ -4,7 +4,7 @@ import { promisify } from "util";
 import { dirname, resolve, normalize, join } from "path";
 import * as glob from "glob";
 
-import { TreeTraversalType, DepthFirstSearch } from "ajlm.utils";
+import { TraversalType, DepthFirstSearch } from "ajlm.utils";
 
 // Promisify nodejs methods
 let readFile = promisify(formerReadFile);
@@ -155,7 +155,7 @@ export class RepositorySpecsReader {
             });
 
         // trigger traversal
-        await dfs.perform(result, TreeTraversalType.PostOrder);
+        await dfs.perform(result, TraversalType.PostOrder);
 
         return result;
     }
@@ -219,7 +219,7 @@ export class RepositorySpecsReader {
 
          // create relationships in the trees
          for(var k in results.packagesMap) {
-            await dfs.perform(results.packagesMap[k], TreeTraversalType.PostOrder);
+            await dfs.perform(results.packagesMap[k], TraversalType.PostOrder);
          }
 
          // determine root packages (those with no dependants)
