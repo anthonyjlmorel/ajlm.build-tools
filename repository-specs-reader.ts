@@ -4,7 +4,7 @@ import { promisify } from "util";
 import { dirname, resolve, normalize, join } from "path";
 import * as glob from "glob";
 
-import { TraversalType, DepthFirstSearch } from "ajlm.utils";
+import { TraversalType, DepthFirstSearch, BreadthFirstSearch } from "ajlm.utils";
 
 // Promisify nodejs methods
 let readFile = promisify(formerReadFile);
@@ -94,8 +94,6 @@ export class RepositorySpecsReader {
        
         readPackages[ pck.name ] = result;
 
-        // declare a parent/child map to detect cycles
-        let parentChildMap: { [name: string]: string; } = {};
         // using a DFS to map relations
         let dfs = new DepthFirstSearch<TSpec>( 
             { 
@@ -140,16 +138,6 @@ export class RepositorySpecsReader {
                     // nothing ...
                 },
                 processEdge: async (parent: TSpec, child: TSpec)=>{
-                    /*
-                    console.log(child.name + " -> " + parent.name);
-                    
-                    
-                    let isDiscovered = await dfs["isNodeDiscovered"](child);
-                    if(isDiscovered && dfs["parentMap"][parent.name] != child.name){
-                        console.log(dfs["parentMap"]);
-                        throw new Error("Cycle Detected");
-                    }*/
-
                     await this.buildParentDependantsTree(child, parent);
                 }
             });

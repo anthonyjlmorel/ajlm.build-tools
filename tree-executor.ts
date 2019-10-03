@@ -201,7 +201,7 @@ export class TreeExecutor {
                             // nothing
                         },
                         processEdge: async (parent: TSpec, node: TSpec, currentLevel: number) => {
-                            swap(node, level + currentLevel);
+                            swap(node, level + currentLevel + 1);
                         }
                     });
 
@@ -222,7 +222,10 @@ export class TreeExecutor {
                 }
             });
 
-        await bfs.perform(root, TraversalType.PreOrder);
+        
+        await bfs.perform(root, TraversalType.PostOrder);
+
+        
 
         // a high level means a higher priority in a BFS
         results = Object.keys( grouped )
