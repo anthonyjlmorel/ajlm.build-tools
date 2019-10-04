@@ -1,5 +1,5 @@
 import { TSpec, RepositorySpecsReader, TRepositorySpecs } from './repository-specs-reader';
-import { BreadthFirstSearch, TraversalType } from 'ajlm.utils';
+import { BreadthFirstSearch, TraversalType, DepthFirstSearch } from 'ajlm.utils';
 import { resolve, dirname } from 'path';
 import { Logger } from './logger';
 import { exec } from 'child_process';
@@ -159,75 +159,12 @@ export class TreeExecutor {
      * The list order will depend on the passed options.
      */
     protected async getSpecsInOrder(root: TSpec, options: TExecutionOptions): Promise<TSpec[][]> {
-        let grouped: { [key:string]: TSpec[]; } = {};
-        let nodeByLevel: { [name: string]: number; } = {};
         let results: TSpec[][] = [];
-        
-        // Use a BFS algorithm to make parallelizable groups
-        let pushNodeInLevel = async (node: TSpec, level: number) => {
-                
-                if(!grouped[ level ]){
-                    grouped[ level ] = [];
-                }
 
-                let formerLevel = nodeByLevel[ node.name ];
+        // get grouped dependencies
+        let grouped = await this.getGroupedDependencies(root);
 
-                if(formerLevel === undefined){
-                    grouped[ level ].push(node);
-                    nodeByLevel[ node.name ] = level;
-
-                } else if(formerLevel < level) {
-                   
-                    // Swapping this node and its dependencies
-                    let swap = (node, newLevel)=>{
-                        
-                        let formerNodeLevel = nodeByLevel[node.name];
-                        nodeByLevel[ node.name ] = newLevel;
-
-                        if(formerNodeLevel !== undefined){
-                            let idx = grouped[ formerNodeLevel ].findIndex(v => v.name == node.name );
-                            grouped[ formerNodeLevel ].splice(idx, 1);
-                        }
-                    
-                        if(!grouped[newLevel]){ grouped[newLevel] = []; }
-                        grouped[ newLevel ].push(node);
-
-                    };
-                    
-                    let anotherBfs = new BreadthFirstSearch({ 
-                        getNodeHash: this.nodeHasher,
-                        adjacentNodeGetter: this.dependenciesRetriever,
-                        processNode: async (node: TSpec) => {
-                            // nothing
-                        },
-                        processEdge: async (parent: TSpec, node: TSpec, currentLevel: number) => {
-                            swap(node, level + currentLevel + 1);
-                        }
-                    });
-
-                    swap(node, level);
-
-                    await anotherBfs.perform(node, TraversalType.PreOrder);
-                }
-            },
-            bfs = new BreadthFirstSearch({ 
-                getNodeHash: this.nodeHasher,
-                adjacentNodeGetter: this.dependenciesRetriever,
-                processNode: async (node: TSpec) => {
-                    // nothing
-                },
-                processEdge: async (parent: TSpec, node: TSpec, level: number) => {
-                    await pushNodeInLevel(parent, level - 1);
-                    await pushNodeInLevel(node, level);
-                }
-            });
-
-        
-        await bfs.perform(root, TraversalType.PostOrder);
-
-        
-
-        // a high level means a higher priority in a BFS
+        // a high level means a higher priority
         results = Object.keys( grouped )
             .sort( (a, b)=>{ return (+a) - (+b); })
             .reverse()
@@ -283,6 +220,90 @@ export class TreeExecutor {
         }
 
         return results;   
+    }
+
+    /**
+     * Organizes dependencies by level.
+     * Each level represents a group of dependencies without link between them.
+     * A lower level is dependent on a higher level.
+     */
+    private async getGroupedDependencies(root: TSpec): Promise<{ [level: string]: TSpec[]; }> {
+        let grouped: { [level:string]: TSpec[]; } = {};
+        let nodeByLevel: { [name: string]: number; } = {};
+        
+        // check grouped entry existence
+        let checkGroupedArrayAndPush = (node: TSpec, level: number)=>{
+            if(!grouped[level]) {
+                grouped[level] = [];
+            }
+            grouped[level].push(node);
+        };
+
+        // Move a node and its dependencies to a new level
+        // removing them from their former level
+        let swap = async (node, newLevel)=>{
+            
+            let performSwap = (node, newLevel) => {
+                let formerNodeLevel = nodeByLevel[node.name];
+
+                if(formerNodeLevel >= newLevel){
+                    return;
+                }
+                
+                let idx = grouped[ formerNodeLevel ].findIndex(v => v.name == node.name );
+                grouped[ formerNodeLevel ].splice(idx, 1);
+                
+                nodeByLevel[ node.name ] = newLevel;
+        
+                checkGroupedArrayAndPush(node, newLevel);
+            };
+            
+            // use another dfs to move dependencies downwards too
+            let anotherDfs = new DepthFirstSearch<TSpec>({ 
+                getNodeHash: this.nodeHasher,
+                adjacentNodeGetter: this.dependenciesRetriever,
+                processNode: async (node: TSpec) => {
+                    // nothing
+                },
+                processEdge: async (parent: TSpec, node: TSpec) => {
+                    performSwap(node, nodeByLevel[parent.name] + 1);
+                }
+            });
+
+            await anotherDfs.perform(node);
+        };
+
+        // Use a DFS algorithm to make parallelizable groups
+        let dfs = new DepthFirstSearch<TSpec>({ 
+                getNodeHash: this.nodeHasher,
+                adjacentNodeGetter: this.dependenciesRetriever,
+                processNode: async (node: TSpec) => {
+                    // nothing
+                },
+                processEdge: async (parent: TSpec, node: TSpec, level: number) => {
+                    
+                    if(!nodeByLevel[parent.name]){
+                        nodeByLevel[parent.name] = 1;
+                        checkGroupedArrayAndPush(parent, nodeByLevel[parent.name]);
+                    }
+
+                    if(!nodeByLevel[node.name]){
+                        nodeByLevel[node.name] = nodeByLevel[parent.name] + 1;
+                        checkGroupedArrayAndPush(node, nodeByLevel[node.name]);
+                    }
+                    else {
+                        let formerLevel = nodeByLevel[node.name];
+                        let newLevel = nodeByLevel[parent.name] + 1;
+                        if(newLevel > formerLevel){
+                            await swap(node, newLevel);
+                        }
+                    }
+                }
+            });
+
+        await dfs.perform(root);
+
+        return grouped;
     }
 
     /**
