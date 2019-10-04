@@ -131,5 +131,5 @@ let fetchCommandLine = async () => {
 // Start
 fetchCommandLine()
     .catch((error)=>{
-        Logger.error(error.toString());
+        Logger.error(" -> Stopped due to error");
     });

@@ -4,7 +4,8 @@ import { promisify } from "util";
 import { dirname, resolve, normalize, join } from "path";
 import * as glob from "glob";
 
-import { TraversalType, DepthFirstSearch, BreadthFirstSearch } from "ajlm.utils";
+import { TraversalType, DepthFirstSearch, DfsTraversalError, DfsTraversalErrorType } from "ajlm.utils";
+import { Logger } from './logger';
 
 // Promisify nodejs methods
 let readFile = promisify(formerReadFile);
@@ -140,11 +141,22 @@ export class RepositorySpecsReader {
                 processEdge: async (parent: TSpec, child: TSpec)=>{
                     await this.buildParentDependantsTree(child, parent);
                 }
-            });
+            }, true);
 
-        // trigger traversal
-        await dfs.perform(result, TraversalType.PostOrder);
+        try {
+            // trigger traversal
+            await dfs.perform(result, TraversalType.PostOrder);
+        }
+        catch(e) {
+            
+            if( (e instanceof DfsTraversalError) && (<DfsTraversalError<TSpec[]>>e).type == DfsTraversalErrorType.Cycle) {
+                // Cycle detected
+                Logger.error(`Cycle Detected in dependencies ${(<DfsTraversalError<TSpec[]>>e).data.map(d => d.name).join(' -> ')}`);
+            }
 
+            throw e;
+        }
+        
         return result;
     }
 
@@ -201,13 +213,26 @@ export class RepositorySpecsReader {
                 processEdge: async (parent: TSpec, child: TSpec) => {
                     await this.buildParentDependantsTree(child, parent);
                 }
-            }
+            }, true
         );
 
 
          // create relationships in the trees
          for(var k in results.packagesMap) {
-            await dfs.perform(results.packagesMap[k], TraversalType.PostOrder);
+            
+            try {
+                // trigger traversal
+                await dfs.perform(results.packagesMap[k], TraversalType.PostOrder);
+            }
+            catch(e) {
+                
+                if( (e instanceof DfsTraversalError) && (<DfsTraversalError<TSpec[]>>e).type == DfsTraversalErrorType.Cycle) {
+                    // Cycle detected
+                    Logger.error(`Cycle Detected in dependencies ${(<DfsTraversalError<TSpec[]>>e).data.map(d => d.name).join(' -> ')}`);
+                }
+    
+                throw e;
+            }
          }
 
          // determine root packages (those with no dependants)
