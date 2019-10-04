@@ -6,6 +6,7 @@ import * as glob from "glob";
 
 import { TraversalType, DepthFirstSearch, DfsTraversalError, DfsTraversalErrorType } from "ajlm.utils";
 import { Logger } from './logger';
+import { Configuration } from './configuration';
 
 // Promisify nodejs methods
 let readFile = promisify(formerReadFile);
@@ -291,16 +292,7 @@ export class RepositorySpecsReader {
                 cwd: packagePath,
                 absolute: true,
                 stat: false,
-                ignore: [
-                    // @todo make this customizable ?
-                    "**/node_modules/**",
-                    "**/dist/**",
-                    "**/bin/**",
-                    "**/lib/**",
-                    "**/bundle/**",
-                    "**/logs/**",
-                    "**/cfg/**"
-                ]
+                ignore: <string[]>Configuration.getInstance().get("glob.ignore")
             }, (err, files)=>{
                 if(err){
                     reject(err);

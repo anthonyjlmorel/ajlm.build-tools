@@ -6,6 +6,7 @@ import { hashElement } from "folder-hash";
 import { Logger } from './logger';
 import { TraversalType, DepthFirstSearch } from 'ajlm.utils';
 import { TreeExecutor, TExecutionOptions } from './tree-executor';
+import { Configuration } from './configuration';
 
 let readFile = promisify(formerReadFile);
 let writeFile = promisify(formerWriteFile);
@@ -17,18 +18,7 @@ let writeFile = promisify(formerWriteFile);
  */
 export class TreeBuilder extends TreeExecutor {
 
-    /**
-     * @TODO put this into a config file and allow a workspace configuration file
-     *      IDEA: put the conf into package.json, and read it as a project basis.
-     *              if not found take those defaults
-     *      Exclude hash file name from this
-     */
-    private static readonly HASH_FILE_NAME: string = ".hash";
-    private static readonly EXCLUDED_FOLDERS_FROM_HASH: string[] = ['.*', 'node_modules', "dist", "lib", "bundle", "logs"];
-    private static readonly EXCLUDED_FILES_FROM_HASH: string[] = [".*"];
-    private static readonly NPM_BUILD_SCRIPT: string = "build";
-    private static readonly FORCE_DEPENDANTS_ON_CHANGE: boolean = true;
-    
+
     /**
      * In case of a recompiled node, flags all dependants as to recompile
      * and ignore the unchanged hash
@@ -97,7 +87,7 @@ export class TreeBuilder extends TreeExecutor {
      */
     private async compile(node: TSpec): Promise<void>{
         
-        let script: string = TreeBuilder.NPM_BUILD_SCRIPT,
+        let script: string = <string>Configuration.getInstance().get("build.script"),
             command: string = `npm run ${script}`;
 
         // check that, in case of npm script, it exists
@@ -128,7 +118,8 @@ export class TreeBuilder extends TreeExecutor {
 
         let hashFile: string,
             hash: string,
-            hashFilePath: string = join( dirname(node.path), "/", TreeBuilder.HASH_FILE_NAME);
+            hashFileName: string = <string>Configuration.getInstance().get("build.hash.hashFileName"),
+            hashFilePath: string = join( dirname(node.path), "/", hashFileName);
 
         try {
             
@@ -148,9 +139,10 @@ export class TreeBuilder extends TreeExecutor {
      * Updates hash file
      */
     private async writeHash(node: TSpec): Promise<void>{
-        let currentHash = await this.hashNode(node);
+        let currentHash = await this.hashNode(node),
+            hashFileName: string = <string>Configuration.getInstance().get("build.hash.hashFileName");
 
-        await writeFile(join(dirname(node.path), "/", TreeBuilder.HASH_FILE_NAME), 
+        await writeFile(join(dirname(node.path), "/", hashFileName), 
                         JSON.stringify( { hash: currentHash }));
     }
 
@@ -160,10 +152,10 @@ export class TreeBuilder extends TreeExecutor {
     private async hashNode(node: TSpec): Promise<string> {
         let hash = await hashElement(dirname(node.path), {
             folders: { 
-                exclude: TreeBuilder.EXCLUDED_FOLDERS_FROM_HASH
+                exclude: <string[]>Configuration.getInstance().get("build.hash.excludedFolders")
             },
             files: {
-                exclude: TreeBuilder.EXCLUDED_FILES_FROM_HASH
+                exclude: <string[]>Configuration.getInstance().get("build.hash.excludedFiles")
             }
         });
 
@@ -175,7 +167,7 @@ export class TreeBuilder extends TreeExecutor {
      */
     private async forceNodeDependants(rootNode: TSpec): Promise<void> {
         
-        if(!TreeBuilder.FORCE_DEPENDANTS_ON_CHANGE){
+        if(Configuration.getInstance().get("build.forceDependantsRebuildOnChange") === false){
             return;
         }
 

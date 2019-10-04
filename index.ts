@@ -4,7 +4,11 @@ import { TreeBuilder } from "./tree-builder";
 import { Logger } from './logger';
 import { TreeExecutor, TExecutionOptions, TTreeExecOptions, TAllExecOptions } from './tree-executor';
 import { TSpec } from 'repository-specs-reader';
+import { Configuration, DefaultConfiguration } from './configuration';
 
+// Init Conf
+// @TODO can we imagine making this customizable as a sub package basis ?
+Configuration.getInstance().initialize( DefaultConfiguration.defaultCfg );
 
 // module entry point
 
