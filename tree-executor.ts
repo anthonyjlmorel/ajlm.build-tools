@@ -4,21 +4,6 @@ import { resolve, dirname } from 'path';
 import { Logger } from './logger';
 import { exec } from 'child_process';
 
-// Define accepted options
-export type TTreeExecOptions = {
-    tree: {
-        parallel?: boolean;
-    }
-};
-
-export type TAllExecOptions = {
-    all: {
-        parallel?: boolean;
-    }
-};
-
-// Cannot have All and Tree options at the same time
-export type TExecutionOptions = { forceAll?:boolean; } & (TTreeExecOptions | TAllExecOptions);
 
 /**
  * 
@@ -119,7 +104,12 @@ export class TreeExecutor {
                 // Depending on code ... reject or resolve and display info
                 Logger.info(`\tCLOSE [${node.name}] ${command} , code : ${code} / ${Date.now() - childStart} ms`, { color: "whiteBright"});
                 
-                resolve();
+                if(!code){
+                    resolve();
+                }
+                else {
+                    reject(code);
+                }
                 
             });
         });
@@ -130,7 +120,8 @@ export class TreeExecutor {
                                 options: TExecutionOptions ): Promise<void> {
                                             
         let orderedNodes: TSpec[][] = 
-            await this.getSpecsInOrder(spec, options);
+            await this.getSpecsInOrder(spec, options),
+            errors: { node: TSpec; error: any; }[] = [];
 
         for(var i = 0; i< orderedNodes.length; i++) {
 
@@ -138,18 +129,33 @@ export class TreeExecutor {
             //       IDEA: if a node errors, just stop process only
             //              of the dependencies of that node but allow
             //              other part of the tree to continue
-            await Promise.all( orderedNodes[i].map((node: TSpec, index: number, col: TSpec[]) => {
+            await Promise.all( orderedNodes[i].map( async (node: TSpec, index: number, col: TSpec[]) => {
+
 
                 if(node.isVirtual){
                     return;
                 }
 
-                if(typeof command == "string"){
-                    return this.execCmd(node, command as string);
-                } else {
-                    return command(node, index, col);
+                try {
+                    if(typeof command == "string"){
+                        await this.execCmd(node, command as string);
+                    } else {
+                        await command(node, index, col);
+                    }
                 }
+                catch(e){
+                    // catch error to let the group finish
+                    errors.push({
+                        node: node,
+                        error: e
+                    });
+                }
+                
             }));
+
+            if(errors.length){
+                throw new TreeExecutionError(errors, typeof command == "string" ? command : null);
+            }
 
         }
     }
@@ -321,4 +327,28 @@ export class TreeExecutor {
         };
     }
     
+}
+
+
+// Define accepted options
+export type TTreeExecOptions = {
+    tree: {
+        parallel?: boolean;
+    }
+};
+
+export type TAllExecOptions = {
+    all: {
+        parallel?: boolean;
+    }
+};
+
+// Cannot have All and Tree options at the same time
+export type TExecutionOptions = { forceAll?:boolean; } & (TTreeExecOptions | TAllExecOptions);
+
+
+export class TreeExecutionError {
+    constructor(
+        public errors: { node: TSpec; error: any}[],
+        public command?: string) {}
 }

@@ -1,5 +1,5 @@
 import { TSpec } from './repository-specs-reader';
-import { readFile as formerReadFile, writeFile as formerWriteFile } from "fs";
+import { readFile as formerReadFile, writeFile as formerWriteFile, unlink as formerUnlink } from "fs";
 import { join, dirname } from "path";
 import { promisify } from "util";
 import { hashElement } from "folder-hash";
@@ -10,6 +10,7 @@ import { Configuration } from './configuration';
 
 let readFile = promisify(formerReadFile);
 let writeFile = promisify(formerWriteFile);
+let unlink = promisify(formerUnlink);
 
 /**
  * Class used to execute a build action against a dependencies tree.
@@ -67,19 +68,26 @@ export class TreeBuilder extends TreeExecutor {
             let areHashesEqual: boolean = await this.areHashesEqual(node);
 
             if(areHashesEqual){
-                Logger.info(`${node.name} already compiled`, { color: "whiteBright"});
+                Logger.info(`${node.name} up to date`, { color: "whiteBright"});
                 return;
             }
         }
         
-        // if forced or code changed, compile
-        await this.compile(node);
+        try{
+            // if forced or code changed, compile
+            await this.compile(node);
 
-        // update hash
-        await this.writeHash(node);
+            // update hash
+            await this.writeHash(node);
 
-        // force dependants to be rebuilt
-        await this.forceNodeDependants(node);
+            // force dependants to be rebuilt
+            await this.forceNodeDependants(node);
+        }
+        catch(e){
+            // erase hash for this node to allow re build
+            await this.eraseHash(node);
+        }
+        
     }
 
     /**
@@ -88,7 +96,7 @@ export class TreeBuilder extends TreeExecutor {
     private async compile(node: TSpec): Promise<void>{
         
         let script: string = <string>Configuration.getInstance().get("build.script"),
-            command: string = `npm run ${script}`;
+            command: string = `npm run ${script} --silent`;
 
         // check that, in case of npm script, it exists
         // in pkg
@@ -144,6 +152,16 @@ export class TreeBuilder extends TreeExecutor {
 
         await writeFile(join(dirname(node.path), "/", hashFileName), 
                         JSON.stringify( { hash: currentHash }));
+    }
+
+    /**
+     * Erases node hash
+     */
+    private async eraseHash(node: TSpec): Promise<void> {
+        let hashFileName: string = <string>Configuration.getInstance().get("build.hash.hashFileName"),
+            pathToHashFile: string = join(dirname(node.path), "/", hashFileName);
+
+        await unlink(pathToHashFile);
     }
 
     /**
