@@ -55,8 +55,6 @@ node index --build --pkg PATH_TO_PKG --all --parallel
 
 **@TODO**
 
-- detect loops in dependencies Tree before reading specs 
-
 - use a non-recursive version of DFS for huge repositories (sensing a perf issue here)
 
 - make customizable some stuffs like : 
