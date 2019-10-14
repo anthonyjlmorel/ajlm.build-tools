@@ -122,7 +122,7 @@ export class TreeExecutor {
         let orderedNodes: TSpec[][] = 
             await this.getSpecsInOrder(spec, options),
             errors: { node: TSpec; error: any; }[] = [];
-
+        
         for(var i = 0; i< orderedNodes.length; i++) {
 
             // @TODO better handling of child error
@@ -239,6 +239,7 @@ export class TreeExecutor {
         
         // check grouped entry existence
         let checkGroupedArrayAndPush = (node: TSpec, level: number)=>{
+            
             if(!grouped[level]) {
                 grouped[level] = [];
             }
@@ -255,10 +256,21 @@ export class TreeExecutor {
                 if(formerNodeLevel >= newLevel){
                     return;
                 }
+
+                if( grouped[ formerNodeLevel ] == undefined ){
+                    grouped[ formerNodeLevel ] = [];
+                }
+
+                if( grouped[ newLevel ] == undefined ){
+                    grouped[ newLevel ] = [];
+                }
+
                 
                 let idx = grouped[ formerNodeLevel ].findIndex(v => v.name == node.name );
-                grouped[ formerNodeLevel ].splice(idx, 1);
-                
+                if(idx > -1){
+                    grouped[ formerNodeLevel ].splice(idx, 1);
+                }
+                                
                 nodeByLevel[ node.name ] = newLevel;
         
                 checkGroupedArrayAndPush(node, newLevel);
@@ -272,7 +284,8 @@ export class TreeExecutor {
                     // nothing
                 },
                 processEdge: async (parent: TSpec, node: TSpec) => {
-                    performSwap(node, nodeByLevel[parent.name] + 1);
+                    
+                    performSwap(node, newLevel + nodeByLevel[parent.name]);
                 }
             });
 
@@ -285,19 +298,21 @@ export class TreeExecutor {
                 adjacentNodeGetter: this.dependenciesRetriever,
                 processNode: async (node: TSpec) => {
                     // nothing
+                    
                 },
                 processEdge: async (parent: TSpec, node: TSpec, level: number) => {
                     
                     if(!nodeByLevel[parent.name]){
                         nodeByLevel[parent.name] = 1;
-                        checkGroupedArrayAndPush(parent, nodeByLevel[parent.name]);
+                        swap(parent, nodeByLevel[parent.name]);
                     }
 
                     if(!nodeByLevel[node.name]){
                         nodeByLevel[node.name] = nodeByLevel[parent.name] + 1;
-                        checkGroupedArrayAndPush(node, nodeByLevel[node.name]);
+                        swap(node, nodeByLevel[node.name]);
                     }
                     else {
+                        
                         let formerLevel = nodeByLevel[node.name];
                         let newLevel = nodeByLevel[parent.name] + 1;
                         if(newLevel > formerLevel){

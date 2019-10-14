@@ -60,4 +60,5 @@ node index --build --pkg PATH_TO_PKG --all --parallel
 - make customizable some stuffs like : 
 1. build command, ... see @todo in code.
 2. do we force dependants to rebuild if a dependencies changed
+
 - do we implement specific stuff like adding dependencies in sub packages or bumping versions ?
