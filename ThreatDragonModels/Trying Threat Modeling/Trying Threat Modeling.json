@@ -8,9 +8,143 @@
     "contributors": [],
     "diagrams": [
       {
-        "title": "Main View",
+        "title": "Main-View",
         "thumbnail": "./public/content/images/thumbnail.jpg",
-        "id": 0
+        "id": 0,
+        "diagramJson": {
+          "cells": [
+            {
+              "type": "tm.Store",
+              "size": {
+                "width": 160,
+                "height": 80
+              },
+              "position": {
+                "x": 107,
+                "y": 145
+              },
+              "angle": 0,
+              "id": "a244f98a-bf48-447d-add0-7655da782ef8",
+              "z": 1,
+              "hasOpenThreats": false,
+              "attrs": {
+                ".element-shape": {
+                  "class": "element-shape hasNoOpenThreats isInScope"
+                },
+                "text": {
+                  "text": "store 0"
+                },
+                ".element-text": {
+                  "class": "element-text hasNoOpenThreats isInScope"
+                }
+              }
+            },
+            {
+              "type": "tm.Process",
+              "size": {
+                "width": 100,
+                "height": 100
+              },
+              "position": {
+                "x": 422,
+                "y": 93
+              },
+              "angle": 0,
+              "id": "58ed25be-09d2-4c4d-8d26-8ce6825d6fa6",
+              "z": 2,
+              "hasOpenThreats": false,
+              "outOfScope": false,
+              "privilegeLevel": "",
+              "attrs": {
+                ".element-shape": {
+                  "class": "element-shape hasNoOpenThreats isInScope"
+                },
+                "text": {
+                  "text": "process 1"
+                },
+                ".element-text": {
+                  "class": "element-text hasNoOpenThreats isInScope"
+                }
+              }
+            },
+            {
+              "type": "tm.Flow",
+              "smooth": true,
+              "source": {
+                "id": "58ed25be-09d2-4c4d-8d26-8ce6825d6fa6"
+              },
+              "target": {
+                "id": "a244f98a-bf48-447d-add0-7655da782ef8"
+              },
+              "vertices": [
+                {
+                  "x": 355,
+                  "y": 147
+                }
+              ],
+              "id": "744e2f2f-72ef-4df5-910d-8c2572638e97",
+              "labels": [
+                {
+                  "position": 0.5,
+                  "attrs": {
+                    "text": {
+                      "text": "flow 2",
+                      "font-weight": "400",
+                      "font-size": "small"
+                    }
+                  }
+                }
+              ],
+              "z": 3,
+              "hasOpenThreats": false,
+              "attrs": {
+                ".marker-target": {
+                  "class": "marker-target hasNoOpenThreats isInScope"
+                },
+                ".connection": {
+                  "class": "connection hasNoOpenThreats isInScope"
+                }
+              }
+            },
+            {
+              "type": "tm.Boundary",
+              "smooth": true,
+              "source": {
+                "x": 30,
+                "y": 20
+              },
+              "target": {
+                "x": 30,
+                "y": 14
+              },
+              "vertices": [
+                {
+                  "x": 182,
+                  "y": 42
+                },
+                {
+                  "x": 520,
+                  "y": 49
+                },
+                {
+                  "x": 493,
+                  "y": 352
+                },
+                {
+                  "x": 76,
+                  "y": 385
+                }
+              ],
+              "id": "ad6fc353-88b9-4295-bc38-51946de76c52",
+              "z": 4,
+              "attrs": {}
+            }
+          ]
+        },
+        "size": {
+          "height": 2119.986083984375,
+          "width": 4204
+        }
       }
     ]
   }
